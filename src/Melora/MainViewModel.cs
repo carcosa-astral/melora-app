@@ -501,9 +501,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 TrackStarted(track);
                 return;
             }
+            Log.Write(System.IO.File.Exists(track.Path)
+                ? $"Skipped, couldn't play ({ManagedBass.Bass.LastError}): {track.Path}"
+                : $"Skipped, file not found: {track.Path}");
             track = _queue.Next(manual: true);
         }
 
+        if (track is not null) Log.Write($"Stopped after {MaxSkipsOnError} files in a row couldn't be played");
         StopAll();
     }
 
@@ -570,6 +574,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (result == StreamResult.Failed)
         {
             _streamStatus = StationProbe.Describe(_engine.LastError);
+            Log.Write($"Radio: couldn't tune in to {station.Name} ({_engine.LastError}): {station.Url}");
             OnNowPlayingChanged();
             return;
         }
@@ -628,6 +633,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         // A live stream only "ends" when the connection drops.
+        Log.Write($"Radio: {_currentStation.Name} dropped the connection");
         _engine.Stop();
         IsPlaying = false;
         _streamTitle = null;

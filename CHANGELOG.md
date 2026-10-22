@@ -9,8 +9,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Covers for songs on the radio: the station's row and the Windows media overlay show the cover of the
   song playing, and the accent colour follows it (with "Tint Melora…" on). Stations don't send pictures,
   so covers are looked up on iTunes and Deezer by artist and song name; it can be turned off in Settings.
+- A log, `data\melora.log`, of things that go wrong without showing: files that were skipped because
+  they're missing or can't be played, scrobbles and loves a service refused or couldn't receive yet,
+  a refused Discord application ID, stations that won't connect or drop, and unexpected errors. It's
+  kept under 1 MB (the previous one is kept as `melora.log.old`).
 - Cover matching prefers an exact title, brackets included, so a remix gets the remix's cover when the
   store has it, and the original's otherwise.
+
+### Fixed
+- A library folder that's missing at a rescan (an unplugged drive, a share that's down) no longer
+  empties that library; its tracks are kept until the folder is back, and the log says so.
 
 ### Changed
 - Uses less memory: album and DJ pictures are decoded at the size they're shown (DJ pictures were

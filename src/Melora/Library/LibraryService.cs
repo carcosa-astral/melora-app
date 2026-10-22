@@ -170,8 +170,17 @@ public sealed partial class LibraryService : IDisposable
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
         var otherFolders = _otherFolders();
 
-        foreach (var folder in Folders.Where(Directory.Exists))
+        foreach (var folder in Folders)
         {
+            if (!Directory.Exists(folder))
+            {
+                // An unplugged drive or a network share that's down: keep what was there rather than
+                // emptying the library, and pick it up again when the folder comes back.
+                Log.Write($"{_kind} folder not found, keeping its tracks: {folder}");
+                foreach (var path in known.Keys.Where(p => IsUnder(AppPaths.FromStored(p), folder))) seen.Add(path);
+                continue;
+            }
+
             foreach (var file in Directory.EnumerateFiles(folder, "*", options))
             {
                 if (!Extensions.Contains(System.IO.Path.GetExtension(file))) continue;
@@ -221,9 +230,10 @@ public sealed partial class LibraryService : IDisposable
                 (int)tag.Disc,
                 (long)f.Properties.Duration.TotalMilliseconds);
         }
-        catch
+        catch (Exception e)
         {
             // Unreadable tags: keep the file, named after itself.
+            Log.Write($"Couldn't read the tags of {file}: {e.Message}");
             return new TrackRow(stored, mtime, null, null, null, null, 0, 0, 0, 0);
         }
     }

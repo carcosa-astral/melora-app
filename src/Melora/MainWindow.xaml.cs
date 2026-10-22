@@ -68,6 +68,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            Log.Write($"Couldn't start: {ex}");
             MessageDialog.Inform(this, "Melora couldn't start", ex.Message);
             Close();
         }

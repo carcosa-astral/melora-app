@@ -18,6 +18,7 @@ public sealed class Scrobbler : ObservableObject, IDisposable
     readonly IReadOnlyList<IScrobbleService> _services;
     readonly SemaphoreSlim _flushLock = new(1, 1);
     readonly DispatcherTimer? _retryTimer;
+    readonly HashSet<string> _unreachable = [];
     Listen? _current;
 
     sealed class Listen(Scrobble play)
@@ -164,29 +165,51 @@ public sealed class Scrobbler : ObservableObject, IDisposable
                 while (_db.GetScrobbles(service.Id, service.MaxBatch) is { Count: > 0 } batch)
                 {
                     var outcome = await service.SubmitAsync(batch.Select(b => b.Play).ToList());
-                    if (outcome is SubmitOutcome.RetryLater or SubmitOutcome.AuthFailed) break;
+                    if (!Report(service, outcome, $"{batch.Count} play(s)")) break;
                     _db.DeleteScrobbles(batch.Select(b => b.Id)); // sent, or refused for good
                     if (outcome == SubmitOutcome.Rejected)
-                        Debug.WriteLine($"{service.Id} rejected {batch.Count} play(s)");
+                        Log.Write($"{service.Id}: refused {string.Join("; ", batch.Select(b => $"{b.Play.Artist} – {b.Play.Title}"))}");
                 }
 
                 foreach (var love in _db.GetPendingLoves(service.Id))
                 {
                     var outcome = await service.LoveAsync(love);
-                    if (outcome is SubmitOutcome.RetryLater or SubmitOutcome.AuthFailed) break;
+                    if (!Report(service, outcome, "loves")) break;
                     _db.ClearPendingLove(service.Id, love.Artist, love.Title); // sent, or refused for good
+                    if (outcome == SubmitOutcome.Rejected)
+                        Log.Write($"{service.Id}: couldn't {(love.Loved ? "love" : "un-love")} {love.Artist} – {love.Title} (not recognised)");
                 }
             }
         }
         catch (Exception e)
         {
             // Never let a scrobbling problem disturb playback; the queue is retried later.
-            Debug.WriteLine($"Scrobble flush failed: {e.Message}");
+            Log.Write($"Scrobbling: sending failed: {e.Message}");
         }
         finally
         {
             Pending = _db.CountScrobbles();
             _flushLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Logs a service that can't be reached (once, until it can again) or that refused the login.
+    /// Returns false when sending to it should stop for now.
+    /// </summary>
+    bool Report(IScrobbleService service, SubmitOutcome outcome, string what)
+    {
+        switch (outcome)
+        {
+            case SubmitOutcome.RetryLater:
+                if (_unreachable.Add(service.Id)) Log.Write($"{service.Id}: can't be reached; {what} kept to send later");
+                return false;
+            case SubmitOutcome.AuthFailed:
+                Log.Write($"{service.Id}: the saved login was refused; {what} kept until you reconnect in Settings");
+                return false;
+            default:
+                if (_unreachable.Remove(service.Id)) Log.Write($"{service.Id}: reachable again");
+                return true;
         }
     }
 

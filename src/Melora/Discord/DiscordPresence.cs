@@ -103,7 +103,14 @@ public sealed class DiscordPresence : ObservableObject, IDisposable
 
     string _status;
     /// <summary>A line for Settings: connected, waiting for Discord, or what went wrong. Set from the background loop.</summary>
-    public string Status { get => _status; private set => Set(ref _status, value); }
+    public string Status
+    {
+        get => _status;
+        private set
+        {
+            if (Set(ref _status, value) && value.StartsWith("Discord didn't", StringComparison.Ordinal)) Log.Write(value);
+        }
+    }
 
     // ---- Updates ----
 
@@ -143,7 +150,7 @@ public sealed class DiscordPresence : ObservableObject, IDisposable
             catch (Exception e)
             {
                 // Never let Discord trouble disturb playback; drop the connection and try again later.
-                Debug.WriteLine($"Discord presence: {e.Message}");
+                Log.Write($"Discord: {e.Message}");
                 _ipc.Disconnect();
                 _shown = null;
             }

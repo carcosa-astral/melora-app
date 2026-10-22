@@ -51,6 +51,7 @@ public partial class App : Application
 
     static void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
+        Log.Write($"Unexpected error: {e.Exception}");
         MessageDialog.Inform(Current.MainWindow, "Something went wrong", e.Exception.Message);
         e.Handled = true;
     }

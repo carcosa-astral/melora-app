@@ -83,9 +83,11 @@ Melora\
 ├── Melora.exe
 ├── bass.dll, bassflac.dll, bassopus.dll, bass_aac.dll
 └── data\
-    └── melora.db      libraries, folders, stations, settings, scrobble and love queues,
-                       cover addresses and scrobbling keys/tokens (SQLite, plain text,
-                       so keep the folder private)
+    ├── melora.db      libraries, folders, stations, settings, scrobble and love queues,
+    │                  cover addresses and scrobbling keys/tokens (SQLite, plain text,
+    │                  so keep the folder private)
+    └── melora.log     problems worth knowing about: skipped files, refused scrobbles,
+                       stations that won't connect (kept under 1 MB)
 ```
 
 Folders on the same drive as Melora are stored as relative paths, so a copy on a USB stick keeps working when its drive letter changes.
