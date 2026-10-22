@@ -90,7 +90,7 @@ dotnet test
 dotnet publish src/Melora -p:PublishProfile=Portable
 ```
 
-This produces a self-contained folder in `dist\Melora\`, with the .NET runtime included. Copy that folder anywhere; no installer is needed.
+This produces a self-contained folder in `dist\Melora\` (about 85 MB, with the .NET runtime included and compressed into `Melora.exe`). Copy that folder anywhere; no installer is needed.
 
 ## Project layout
 

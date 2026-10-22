@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- The portable build compresses its single-file exe: the folder is about 85 MB instead of 193 MB,
+  with no noticeable change in startup time.
+
 ## [0.5.0] - 2026-10-21
 
 Milestone 5: polish.
