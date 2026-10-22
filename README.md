@@ -20,7 +20,7 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | Shuffle | Every track plays once before any repeats, and the same artist or album never plays back-to-back |
 | Repeat | Off, all, one |
 | Library | Watched folders, rescanned automatically when files change |
-| Mixes | Their own folders, grouped A–Z by DJ: the folder each mix sits in (`Mixes\DJ Name\...`). Double-click to play; shuffle works here too. A mixes folder inside a music folder only shows up in Mixes |
+| Mixes | Their own folders, grouped A–Z by DJ: the folder each mix sits in (`Mixes\DJ Name\...`), then by date, oldest first (a date in the title like "(2020-10-14)", or the year tag). Double-click to play; shuffle works here too. A mixes folder inside a music folder only shows up in Mixes |
 | Radio | Paste an address (direct stream, `.pls` or `.m3u`), check it, name it, save. Shows what the station is playing live. MP3, AAC, Ogg Vorbis and Opus streams |
 | Tray | Minimizing sends Melora to the system tray (can be turned off in Settings); closing the window quits. Left-click the icon to show or hide Melora; right-click for play/pause, next, previous and Quit. The tooltip shows what's playing |
 | Media keys | Keyboard media keys and the Windows media overlay (volume flyout, lock screen) show the track, cover art and progress, and control playback |
@@ -65,13 +65,13 @@ Discord shows the name of an "application" after "Listening to", so Melora needs
 1. Open [discord.com/developers/applications](https://discord.com/developers/applications) and sign in.
    If it asks what brings you there, click **Skip**.
 2. Click **New Application**, name it **Melora**, and accept the terms.
-3. Optionally, set its **App Icon** to `tools/Melora-512.png`. Discord shows it when there's no album cover.
+3. Optionally, set its **App Icon** to `tools/Melora-1024.png`. Discord shows it when there's no album cover.
 4. Copy the **Application ID** from the General Information page.
 5. In Melora's Settings, turn on **Show what I'm playing on my Discord profile** and paste the ID.
 
 Discord must be running on the same PC. Discord can only show pictures from the web, so Melora looks up
 each album's cover online: on the Cover Art Archive for files tagged with Picard, then iTunes, then Deezer,
-sending just the artist and album name. Answers are kept in Melora's data folder, so each album is looked
+sending just the artist and album name. For mixes it shows the DJ's photo from Deezer, found by the DJ's folder name. Answers are kept in Melora's data folder, so each album is looked
 up once. Nothing is looked up while the Discord status is off.
 
 ## Portable data
@@ -129,7 +129,7 @@ src/Melora/
 ├── Assets/Fonts/ IBM Plex (SIL Open Font License)
 └── *.xaml        Main window and settings
 tests/Melora.Tests/  Unit tests (xUnit)
-tools/make-icon.ps1  Renders Assets/Melora.ico and tools/Melora-512.png
+tools/make-icon.ps1  Renders Assets/Melora.ico and tools/Melora-1024.png
 lib/bass/         Native BASS libraries (x64)
 ```
 

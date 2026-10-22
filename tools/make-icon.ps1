@@ -1,6 +1,6 @@
 # Renders Melora's icon (a dark tile with three accent bars) to src/Melora/Assets/Melora.ico.
 # Each size is drawn separately and stored as PNG inside the .ico, so small sizes stay crisp.
-# Also writes a 512 px PNG, tools/Melora-512.png, for the app icon in Discord's developer portal.
+# Also writes a 1024 px PNG, tools/Melora-1024.png, for the app icon in Discord's developer portal.
 #   pwsh tools/make-icon.ps1
 Add-Type -AssemblyName System.Drawing
 
@@ -66,6 +66,6 @@ foreach ($img in $images) { $w.Write([byte[]]$img[1]) }
 $w.Dispose()
 "Wrote $out ($((Get-Item $out).Length) bytes)"
 
-$png = Join-Path $PSScriptRoot "Melora-512.png"
-[System.IO.File]::WriteAllBytes($png, (Render 512)[1])
+$png = Join-Path $PSScriptRoot "Melora-1024.png"
+[System.IO.File]::WriteAllBytes($png, (Render 1024)[1])
 "Wrote $png"

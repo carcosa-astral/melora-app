@@ -35,3 +35,16 @@ public class FolderOwnershipTests
         // "D:\Music\Mixes Old" is not inside "D:\Music\Mixes".
         Assert.True(LibraryService.Owns(@"D:\Music\Mixes Old\a.mp3", Music, [Mixes]));
 }
+
+public class MixDateTests
+{
+    [Theory]
+    [InlineData("Club Set (2020-10-14) [LP Giobbi]", 0, "2020-10-14")]
+    [InlineData("Live at EDC Mexico 2023 (Kinetic Field) (2023-03-02)", 0, "2023-03-02")] // the bare year isn't the date
+    [InlineData("Boiler Room 2019.07.04", 0, "2019-07-04")]
+    [InlineData("Set (2021-02-30)", 0, null)]                                             // not a real date
+    [InlineData("Warehouse Set", 2018, "2018-01-01")]                                     // falls back to the year tag
+    [InlineData("Warehouse Set", 0, null)]
+    public void MixDate(string title, int year, string? expected) =>
+        Assert.Equal(expected is null ? null : DateOnly.Parse(expected), Melora.Library.LibraryService.MixDate(title, year));
+}

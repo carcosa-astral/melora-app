@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- Mixes are sorted by date within each DJ, oldest first: the date in the title, like "(2020-10-14)",
+  or the year tag. Mixes without either come last, A–Z.
+- On Discord, a mix shows the DJ's photo, found on Deezer by the DJ's folder name (Discord can't show
+  the picture in the folder, as it only takes pictures from the web).
+- The icon for the Discord application is now 1024 px, as Discord asks (`tools/Melora-1024.png`).
+
 ## [0.6.0] - 2026-10-22
 
 Milestone 6: Discord, gapless and love.
@@ -23,7 +30,7 @@ Milestone 6: Discord, gapless and love.
   how), and mixes and radio can each be left out. Nothing shows while paused. Covers are looked up
   online (Cover Art Archive for files tagged with Picard, then iTunes, then Deezer) because Discord can
   only show pictures from the web; nothing is looked up while this is off.
-- `tools/make-icon.ps1` also writes a 512 px PNG of the icon, for the Discord application.
+- `tools/make-icon.ps1` also writes a 1024 px PNG of the icon, for the Discord application.
 
 ### Fixed
 - Playback now follows Windows when the default output device changes (headphones plugged in or

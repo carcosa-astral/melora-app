@@ -128,3 +128,37 @@ public class PresenceTests
         Assert.Equal("Fine", DiscordPresence.Fit("Fine"));
     }
 }
+
+public class ArtistPhotoTests
+{
+    [Fact]
+    public async Task DjPhoto_ComesFromDeezer_OnlyForTheExactName()
+    {
+        var http = new HttpClient(new StubHandler("""
+            {"data":[
+              {"name":"LP Giobbi Tribute","picture_xl":"https://x/wrong.jpg"},
+              {"name":"Nobody","picture_xl":"https://e-cdns-images.dzcdn.net/images/artist//1000x1000.jpg"},
+              {"name":"LP Giobbi","picture_xl":"https://x/lp.jpg"}]}
+            """));
+        var path = Path.Combine(Path.GetTempPath(), $"melora-artist-{Guid.NewGuid():N}.db");
+        try
+        {
+            var lookup = new CoverLookup(http, new LibraryDb(path));
+            Assert.Equal("https://x/lp.jpg", await lookup.FindAsync(new CoverQuery("LP Giobbi", null, null)));
+            Assert.Null(await lookup.FindAsync(new CoverQuery("Nobody", null, null))); // placeholder, not a photo
+            Assert.StartsWith("artist|", CoverLookup.Key(new CoverQuery("LP Giobbi", null, null)));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var f in new[] { path, path + "-wal", path + "-shm" })
+                if (File.Exists(f)) File.Delete(f);
+        }
+    }
+
+    sealed class StubHandler(string body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancel) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(body) });
+    }
+}

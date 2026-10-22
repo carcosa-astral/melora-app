@@ -247,7 +247,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             var start = DateTimeOffset.UtcNow - TimeSpan.FromSeconds(_engine.Position);
             var end = start + TimeSpan.FromSeconds(_engine.Length);
             info = t.Library == LibraryKind.Mixes
-                ? new PresenceInfo(PresenceSource.Mixes, t.Title, t.Artist, t.Collection, null, start, end)
+                ? new PresenceInfo(PresenceSource.Mixes, t.Title, t.Artist, t.Collection, new CoverQuery(t.Collection, null, null), start, end)
                 : new PresenceInfo(PresenceSource.Music, t.Title, t.Artist, t.Album,
                     t.Album is { } album ? new CoverQuery(t.AlbumArtist ?? t.Artist, album, null, t.Path) : null,
                     start, end);

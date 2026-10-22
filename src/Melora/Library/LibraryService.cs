@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace Melora.Library;
 
@@ -6,7 +8,7 @@ namespace Melora.Library;
 /// Scans watched folders into the database, keeps them watched, and builds the
 /// in-memory track list (grouped by album) for the UI.
 /// </summary>
-public sealed class LibraryService : IDisposable
+public sealed partial class LibraryService : IDisposable
 {
     static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase) { ".flac", ".opus", ".mp3" };
     static readonly TimeSpan WatchDebounce = TimeSpan.FromSeconds(2);
@@ -39,7 +41,7 @@ public sealed class LibraryService : IDisposable
 
     /// <summary>
     /// Loads the library from the database. Music is sorted by artist, year, album, disc and track;
-    /// Mixes by DJ (their folder) and title.
+    /// Mixes by DJ (their folder), then date, oldest first.
     /// </summary>
     public List<Track> Load()
     {
@@ -90,6 +92,7 @@ public sealed class LibraryService : IDisposable
         {
             return tracks
                 .OrderBy(t => t.Collection, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(t => MixDate(t.Title, t.Group.Year) ?? DateOnly.MaxValue) // undated mixes last
                 .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
         }
@@ -105,6 +108,24 @@ public sealed class LibraryService : IDisposable
     }
 
     static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>
+    /// When a mix was played: a date in its title like "(2020-10-14)" (also with dots or slashes),
+    /// or failing that the year tag, as 1 January. Null when there's neither.
+    /// </summary>
+    public static DateOnly? MixDate(string title, int year)
+    {
+        foreach (Match m in DateInTitle().Matches(title))
+        {
+            if (DateOnly.TryParseExact($"{m.Groups[1].Value}-{m.Groups[2].Value}-{m.Groups[3].Value}", "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+                return date;
+        }
+        return year is > 0 and < 10000 ? new DateOnly(year, 1, 1) : null;
+    }
+
+    [GeneratedRegex(@"(?<!\d)((?:19|20)\d{2})[-./](\d{2})[-./](\d{2})(?!\d)")]
+    private static partial Regex DateInTitle();
 
     /// <summary>
     /// The DJ for a mix: the first folder under the mixes folder it lives in

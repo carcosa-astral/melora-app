@@ -8,15 +8,20 @@ using Melora.Library;
 namespace Melora.Discord;
 
 /// <summary>
-/// What to find a cover for: an album, or (for radio) a single song. For an album, a file from it
-/// can be given, whose MusicBrainz release ID (if tagged) finds the exact cover.
+/// What to find a picture for: an album, a single song (radio), or with neither, the artist
+/// themself (a DJ, for mixes). For an album, a file from it can be given, whose MusicBrainz release
+/// ID (if tagged) finds the exact cover.
 /// </summary>
-public sealed record CoverQuery(string Artist, string? Album, string? Title, string? SamplePath = null);
+public sealed record CoverQuery(string Artist, string? Album, string? Title, string? SamplePath = null)
+{
+    public bool IsArtist => Album is null && Title is null;
+}
 
 /// <summary>
 /// Finds a web address for a cover, since Discord can only show pictures from the web, not files on
 /// this PC. Tries the Cover Art Archive (only for files tagged with a MusicBrainz release), then
-/// iTunes, then Deezer. Answers are kept in the database: a found cover for good, a miss for a week.
+/// iTunes, then Deezer; artist photos come from Deezer only. Answers are kept in the database: a
+/// found cover for good, a miss for a week.
 /// </summary>
 public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
 {
@@ -49,8 +54,9 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
         return url;
     }
 
-    public static string Key(CoverQuery query) => query.Album is { } album
-        ? $"album|{Normalize(query.Artist)}|{Normalize(album)}"
+    public static string Key(CoverQuery query) =>
+        query.IsArtist ? $"artist|{Normalize(query.Artist)}"
+        : query.Album is { } album ? $"album|{Normalize(query.Artist)}|{Normalize(album)}"
         : $"song|{Normalize(query.Artist)}|{Normalize(query.Title ?? "")}";
 
     // ---- Sources ----
@@ -71,6 +77,7 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
 
     async Task<string?> ITunesAsync(CoverQuery query)
     {
+        if (query.IsArtist) return null; // the iTunes search has no artist photos
         var album = query.Album is not null;
         var term = Uri.EscapeDataString($"{query.Artist} {(album ? query.Album : query.Title)}");
         var json = await GetJsonAsync($"https://itunes.apple.com/search?term={term}&entity={(album ? "album" : "song")}&limit=15");
@@ -87,6 +94,7 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
 
     async Task<string?> DeezerAsync(CoverQuery query)
     {
+        if (query.IsArtist) return await DeezerArtistAsync(query.Artist);
         var album = query.Album is not null;
         var q = album
             ? $"artist:\"{query.Artist}\" album:\"{query.Album}\""
@@ -98,6 +106,19 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
             if (!Matches(query, result?["artist"]?["name"]?.GetValue<string>(), result?["title"]?.GetValue<string>())) continue;
             var cover = album ? result?["cover_xl"] : result?["album"]?["cover_xl"];
             if (cover?.GetValue<string>() is { Length: > 0 } url) return url;
+        }
+        return null;
+    }
+
+    async Task<string?> DeezerArtistAsync(string artist)
+    {
+        var json = await GetJsonAsync($"https://api.deezer.com/search/artist?q={Uri.EscapeDataString(artist)}&limit=10");
+        foreach (var result in json?["data"]?.AsArray() ?? [])
+        {
+            // Only the same name exactly: a prefix match could put up a stranger's photo.
+            if (Normalize(result?["name"]?.GetValue<string>() ?? "") != Normalize(artist)) continue;
+            // Artists without a photo get a placeholder whose address has an empty image ID.
+            if (result?["picture_xl"]?.GetValue<string>() is { Length: > 0 } url && !url.Contains("/artist//")) return url;
         }
         return null;
     }
