@@ -76,6 +76,8 @@ public sealed class LibraryService : IDisposable
                 Title = Clean(row.Title) ?? System.IO.Path.GetFileNameWithoutExtension(path),
                 Artist = artist,
                 Group = group,
+                Album = album,
+                AlbumArtist = Clean(row.AlbumArtist),
                 Library = _kind,
                 Collection = _kind == LibraryKind.Mixes ? CollectionFor(path, roots) : "",
                 TrackNo = row.TrackNo,

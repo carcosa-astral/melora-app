@@ -3,21 +3,130 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Melora"
         Title="Settings"
-        Width="580" SizeToContent="Height" MinWidth="440"
+        Width="600" SizeToContent="Height" MinWidth="460"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{StaticResource WindowFallbackBrush}"
         Foreground="{StaticResource TextBrush}"
         FontFamily="{StaticResource UiFont}" FontSize="13"
         TextOptions.TextFormattingMode="Display"
         UseLayoutRounding="True">
-    <StackPanel Margin="24">
-        <local:FolderSection x:Name="MusicSection" />
-        <local:FolderSection x:Name="MixesSection" Margin="0,28,0,0" />
+    <Window.Resources>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,28,0,10" />
+        </Style>
+        <Style x:Key="ServiceName" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="LineHeight" Value="19" />
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Margin" Value="0,10,0,6" />
+        </Style>
+        <Style x:Key="Card" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource BarBrush}" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="16,14" />
+            <Setter Property="Margin" Value="0,10,0,0" />
+        </Style>
+    </Window.Resources>
 
-        <TextBlock Text="Window" FontSize="16" FontWeight="SemiBold" Margin="0,28,0,10" />
-        <CheckBox Content="Minimizing sends Melora to the system tray" IsChecked="{Binding MinimizeToTray}" />
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0" Padding="24,12">
+            <Button Style="{StaticResource TextButton}" Content="Done" IsDefault="True" IsCancel="True"
+                    HorizontalAlignment="Right" Click="OnDone" />
+        </Border>
 
-        <Button Style="{StaticResource TextButton}" Content="Done" IsDefault="True" IsCancel="True"
-                HorizontalAlignment="Right" Margin="0,24,0,0" Click="OnDone" />
-    </StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="24,24,24,20">
+                <local:FolderSection x:Name="MusicSection" />
+                <local:FolderSection x:Name="MixesSection" Margin="0,28,0,0" />
+
+                <TextBlock Text="Window" Style="{StaticResource Heading}" />
+                <CheckBox Content="Minimizing sends Melora to the system tray" IsChecked="{Binding MinimizeToTray}" />
+
+                <!-- ===== Scrobbling ===== -->
+                <TextBlock Text="Scrobbling" Style="{StaticResource Heading}" />
+                <TextBlock Style="{StaticResource Hint}"
+                           Text="A play counts once you've listened to half of it or 4 minutes, whichever comes first. Tracks under 30 seconds and radio are never sent. Plays made offline are kept and sent later." />
+                <CheckBox Content="Scrobble mixes too" IsChecked="{Binding Scrobbler.ScrobbleMixes}" Margin="0,12,0,0" />
+                <TextBlock Text="{Binding Scrobbler.PendingText}" Style="{StaticResource Hint}" Margin="0,8,0,0"
+                           Foreground="{StaticResource AccentBrush}" />
+
+                <!-- Last.fm -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <DockPanel>
+                            <Button x:Name="LastFmDisconnect" DockPanel.Dock="Right" Style="{StaticResource TextButton}"
+                                    Content="Disconnect" Padding="10,4" Click="OnLastFmDisconnect" />
+                            <StackPanel>
+                                <TextBlock Text="Last.fm" Style="{StaticResource ServiceName}" />
+                                <TextBlock x:Name="LastFmStatus" Style="{StaticResource Hint}" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DockPanel>
+
+                        <StackPanel x:Name="LastFmSetup">
+                            <TextBlock Style="{StaticResource Hint}" Margin="0,12,0,0">
+                                Last.fm needs your own API key. Create one for free at
+                                <Hyperlink NavigateUri="https://www.last.fm/api/account/create" RequestNavigate="OnLink"
+                                           Foreground="{StaticResource AccentBrush}">last.fm/api/account/create</Hyperlink>
+                                (any application name will do), then paste the key and secret here.
+                            </TextBlock>
+                            <TextBlock Text="API key" Style="{StaticResource FieldLabel}" />
+                            <TextBox x:Name="LastFmKey" FontFamily="{StaticResource MonoFont}" FontSize="12" />
+                            <TextBlock Text="Shared secret" Style="{StaticResource FieldLabel}" />
+                            <PasswordBox x:Name="LastFmSecret" FontFamily="{StaticResource MonoFont}" FontSize="12" />
+                            <DockPanel Margin="0,12,0,0">
+                                <Button x:Name="LastFmConnect" Style="{StaticResource TextButton}" Content="Connect…"
+                                        Click="OnLastFmConnect" />
+                                <TextBlock x:Name="LastFmMessage" Style="{StaticResource Hint}" Margin="12,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </DockPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- ListenBrainz -->
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <DockPanel>
+                            <Button x:Name="ListenBrainzDisconnect" DockPanel.Dock="Right" Style="{StaticResource TextButton}"
+                                    Content="Disconnect" Padding="10,4" Click="OnListenBrainzDisconnect" />
+                            <StackPanel>
+                                <TextBlock Text="ListenBrainz" Style="{StaticResource ServiceName}" />
+                                <TextBlock x:Name="ListenBrainzStatus" Style="{StaticResource Hint}" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </DockPanel>
+
+                        <StackPanel x:Name="ListenBrainzSetup">
+                            <TextBlock Style="{StaticResource Hint}" Margin="0,12,0,0">
+                                Copy your user token from
+                                <Hyperlink NavigateUri="https://listenbrainz.org/settings/" RequestNavigate="OnLink"
+                                           Foreground="{StaticResource AccentBrush}">listenbrainz.org/settings</Hyperlink>
+                                and paste it here.
+                            </TextBlock>
+                            <TextBlock Text="User token" Style="{StaticResource FieldLabel}" />
+                            <PasswordBox x:Name="ListenBrainzToken" FontFamily="{StaticResource MonoFont}" FontSize="12" />
+                            <DockPanel Margin="0,12,0,0">
+                                <Button x:Name="ListenBrainzConnect" Style="{StaticResource TextButton}" Content="Connect"
+                                        Click="OnListenBrainzConnect" />
+                                <TextBlock x:Name="ListenBrainzMessage" Style="{StaticResource Hint}" Margin="12,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </DockPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Style="{StaticResource Hint}" FontSize="12" Margin="0,12,0,0"
+                           Text="Keys and tokens are kept in Melora's data folder, next to Melora.exe." />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
 </Window>

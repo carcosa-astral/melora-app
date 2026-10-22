@@ -5,7 +5,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-21
+
+Milestone 4: scrobbling.
+
+### Added
+- Scrobbling to Last.fm and ListenBrainz, each connected from Settings. Last.fm uses your own API key and
+  a one-time approval in the browser; ListenBrainz uses your user token.
+- "Now playing" is sent when a track starts. A play is scrobbled once you've actually listened to half
+  of it or 4 minutes, whichever comes first (paused time and seeking don't count). Tracks of 30 seconds
+  or less and radio are never scrobbled; mixes can be switched off.
+- Plays are queued in Melora's data folder and sent in batches, oldest first. Plays made offline are sent
+  when the connection comes back (checked every 5 minutes and at startup), and each service has its own
+  queue so one being down doesn't hold up the other. Settings shows how many are waiting.
+- If a service stops accepting the saved login, Settings says so and keeps the plays until you reconnect.
+
 ### Changed
+- Settings scrolls when it's taller than the screen.
 - Mixes are grouped under a heading per DJ, taken from the folder each mix sits in, sorted A–Z.
   Mixes directly in the mixes folder are grouped under that folder's name. Each DJ heading shows the
   DJ's picture once (their folder image or embedded art); mix rows no longer repeat it.

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Windows.Data;
 using System.Windows.Threading;
@@ -7,6 +8,7 @@ using Melora.Audio;
 using Melora.Library;
 using Melora.Playback;
 using Melora.Radio;
+using Melora.Scrobbling;
 
 namespace Melora;
 
@@ -26,6 +28,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public TrackLibrary Music { get; }
     public TrackLibrary Mixes { get; }
+    public Scrobbler Scrobbler { get; }
     public ObservableCollection<Station> Stations { get; } = [];
 
     public MainViewModel()
@@ -37,6 +40,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         mixes = new LibraryService(_db, LibraryKind.Mixes, () => music.Folders);
         Music = new TrackLibrary(music, groupBy: nameof(Track.Group));
         Mixes = new TrackLibrary(mixes, groupBy: nameof(Track.Collection));
+        Scrobbler = new Scrobbler(_db);
 
         foreach (var library in new[] { Music, Mixes })
         {
@@ -89,6 +93,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         _timer.Start();
+        _ = Scrobbler.FlushAsync(); // anything left over from last time
         await RescanAsync();
     }
 
@@ -383,6 +388,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 Length = _engine.Length;
                 Position = 0;
                 IsPlaying = true;
+                Scrobbler.TrackStarted(track, TimeSpan.FromSeconds(_engine.Length));
                 FormatText = DescribeFormat();
                 HighlightPlaying();
                 OnNowPlayingChanged();
@@ -398,6 +404,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public async Task PlayStation(Station station)
     {
         _currentTrack = null;
+        Scrobbler.TrackStopped();
         ClearStation();
         _currentStation = station;
         station.IsPlaying = true;
@@ -451,6 +458,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         _engine.Stop();
         _currentTrack = null;
+        Scrobbler.TrackStopped();
         ClearStation();
         IsPlaying = false;
         Position = 0;
@@ -508,9 +516,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     // Ticks are 250 ms: re-read the stream title every 3 s.
     const int TitleCheckTicks = 12;
     int _titleCheckTicks;
+    readonly Stopwatch _tickClock = Stopwatch.StartNew();
+    TimeSpan _lastTick;
 
     void Tick()
     {
+        // Real time between ticks, counted only while a track is actually playing.
+        var now = _tickClock.Elapsed;
+        var elapsed = now - _lastTick;
+        _lastTick = now;
+        if (!_engine.IsLive && _currentTrack is not null && _engine.IsPlaying) Scrobbler.Listened(elapsed);
+
         if (_engine.IsLive)
         {
             _listened = _engine.Position;
@@ -570,6 +586,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _timer.Stop();
+        Scrobbler.Dispose();
         Music.Service.Dispose();
         Mixes.Service.Dispose();
         _engine.Dispose();

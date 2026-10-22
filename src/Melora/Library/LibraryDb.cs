@@ -1,3 +1,4 @@
+using Melora.Scrobbling;
 using Microsoft.Data.Sqlite;
 
 namespace Melora.Library;
@@ -42,6 +43,17 @@ public sealed class LibraryDb
                 id   INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 url  TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS scrobbles (
+                id           INTEGER PRIMARY KEY,
+                service      TEXT NOT NULL,
+                artist       TEXT NOT NULL,
+                title        TEXT NOT NULL,
+                album        TEXT,
+                album_artist TEXT,
+                track_no     INTEGER NOT NULL DEFAULT 0,
+                duration_ms  INTEGER NOT NULL DEFAULT 0,
+                started_at   INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS settings (
                 key   TEXT PRIMARY KEY,
@@ -251,6 +263,79 @@ public sealed class LibraryDb
         cmd.ExecuteNonQuery();
     }
 
+    // ---- Scrobble queue (one row per play per service, until it's been sent) ----
+
+    public void AddScrobble(string service, Scrobble play)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO scrobbles (service, artist, title, album, album_artist, track_no, duration_ms, started_at)
+            VALUES ($service, $artist, $title, $album, $albumArtist, $trackNo, $duration, $startedAt)
+            """;
+        cmd.Parameters.AddWithValue("$service", service);
+        cmd.Parameters.AddWithValue("$artist", play.Artist);
+        cmd.Parameters.AddWithValue("$title", play.Title);
+        cmd.Parameters.AddWithValue("$album", (object?)play.Album ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$albumArtist", (object?)play.AlbumArtist ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$trackNo", play.TrackNo);
+        cmd.Parameters.AddWithValue("$duration", (long)play.Duration.TotalMilliseconds);
+        cmd.Parameters.AddWithValue("$startedAt", play.StartedAt.ToUnixTimeSeconds());
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>The oldest queued plays for a service.</summary>
+    public List<(long Id, Scrobble Play)> GetScrobbles(string service, int limit)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, artist, title, album, album_artist, track_no, duration_ms, started_at
+            FROM scrobbles WHERE service = $service ORDER BY started_at, id LIMIT $limit
+            """;
+        cmd.Parameters.AddWithValue("$service", service);
+        cmd.Parameters.AddWithValue("$limit", limit);
+        var result = new List<(long, Scrobble)>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            result.Add((r.GetInt64(0), new Scrobble(
+                r.GetString(1), r.GetString(2),
+                r.IsDBNull(3) ? null : r.GetString(3),
+                r.IsDBNull(4) ? null : r.GetString(4),
+                r.GetInt32(5),
+                TimeSpan.FromMilliseconds(r.GetInt64(6)),
+                DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(7)))));
+        }
+        return result;
+    }
+
+    public void DeleteScrobbles(IEnumerable<long> ids)
+    {
+        using var db = Open();
+        using var tx = db.BeginTransaction();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "DELETE FROM scrobbles WHERE id = $id";
+        var id = cmd.Parameters.Add("$id", SqliteType.Integer);
+        foreach (var value in ids)
+        {
+            id.Value = value;
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
+    }
+
+    public int CountScrobbles(string? service = null)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = service is null
+            ? "SELECT COUNT(*) FROM scrobbles"
+            : "SELECT COUNT(*) FROM scrobbles WHERE service = $service";
+        if (service is not null) cmd.Parameters.AddWithValue("$service", service);
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
     // ---- Settings ----
 
     public string? GetSetting(string key)
@@ -260,6 +345,15 @@ public sealed class LibraryDb
         cmd.CommandText = "SELECT value FROM settings WHERE key = $key";
         cmd.Parameters.AddWithValue("$key", key);
         return cmd.ExecuteScalar() as string;
+    }
+
+    public void DeleteSetting(string key)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "DELETE FROM settings WHERE key = $key";
+        cmd.Parameters.AddWithValue("$key", key);
+        cmd.ExecuteNonQuery();
     }
 
     public void SetSetting(string key, string value)
