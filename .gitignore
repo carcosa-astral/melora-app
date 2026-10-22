@@ -1,0 +1,18 @@
+# Build output
+bin/
+obj/
+dist/
+*.user
+.vs/
+.vscode/
+.idea/
+
+# Runtime data written next to the exe during development
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# OS
+Thumbs.db
+Desktop.ini
