@@ -71,6 +71,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _queue.SetShuffle(_db.GetSetting("shuffle") == "1");
         _queue.Repeat = Enum.TryParse<RepeatMode>(_db.GetSetting("repeat"), out var r) ? r : RepeatMode.All;
         _tab = Enum.TryParse<LibraryTab>(_db.GetSetting("tab"), out var t) ? t : LibraryTab.Music;
+        _closeToTray = _db.GetSetting("closeToTray") != "0";
+        _minimizeToTray = _db.GetSetting("minimizeToTray") != "0";
         OnPropertyChanged(nameof(Volume));
         OnPropertyChanged(nameof(Shuffle));
         OnRepeatChanged();
@@ -131,6 +133,31 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     TrackLibrary LibraryFor(LibraryKind kind) => kind == LibraryKind.Mixes ? Mixes : Music;
 
+    // ---- Window behaviour ----
+
+    bool _closeToTray = true;
+    /// <summary>The close button hides Melora to the tray instead of quitting.</summary>
+    public bool CloseToTray
+    {
+        get => _closeToTray;
+        set { if (Set(ref _closeToTray, value)) _db.SetSetting("closeToTray", value ? "1" : "0"); }
+    }
+
+    bool _minimizeToTray = true;
+    /// <summary>Minimizing hides Melora to the tray instead of the taskbar.</summary>
+    public bool MinimizeToTray
+    {
+        get => _minimizeToTray;
+        set { if (Set(ref _minimizeToTray, value)) _db.SetSetting("minimizeToTray", value ? "1" : "0"); }
+    }
+
+    /// <summary>Whether the "still running in the tray" hint has been shown once already.</summary>
+    public bool TrayHintShown
+    {
+        get => _db.GetSetting("trayHintShown") == "1";
+        set => _db.SetSetting("trayHintShown", value ? "1" : "0");
+    }
+
     // ---- Now playing ----
 
     Track? _currentTrack;
@@ -140,6 +167,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>The station being played (or last played, while stopped).</summary>
     public Station? CurrentStation => _currentStation;
+
+    public Track? CurrentTrack => _currentTrack;
+
+    /// <summary>What the current station says is playing, if anything.</summary>
+    public string? StreamTitle => _streamTitle;
+
+    /// <summary>A track is loaded but paused.</summary>
+    public bool IsPaused => _currentTrack is not null && !_isPlaying && _engine.IsLoaded;
+
+    public string PlayPauseLabel => _isPlaying ? (IsLive ? "Stop" : "Pause") : "Play";
 
     public bool IsLive => _currentStation is not null;
 
@@ -172,11 +209,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsLive));
         OnPropertyChanged(nameof(CanSeek));
         OnPropertyChanged(nameof(TimeText));
+        OnPropertyChanged(nameof(CurrentTrack));
+        OnPropertyChanged(nameof(StreamTitle));
+        OnPropertyChanged(nameof(PlayPauseLabel));
         if (_currentStation is { } s) s.NowPlaying = _streamStatus ?? _streamTitle;
     }
 
     bool _isPlaying;
-    public bool IsPlaying { get => _isPlaying; private set => Set(ref _isPlaying, value); }
+    public bool IsPlaying
+    {
+        get => _isPlaying;
+        private set
+        {
+            if (!Set(ref _isPlaying, value)) return;
+            OnPropertyChanged(nameof(PlayPauseLabel));
+            OnPropertyChanged(nameof(IsPaused));
+        }
+    }
 
     /// <summary>Set while the user drags the seek bar, so the timer doesn't fight them.</summary>
     public bool IsSeeking { get; set; }
@@ -292,6 +341,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         var library = _tab == LibraryTab.Mixes ? Mixes : Music;
         PlayTrack(_queue.Start(VisibleTracks(library), Shuffle ? null : selected as Track));
+    }
+
+    /// <summary>Stops playback entirely (radio keeps its station so Play tunes back in).</summary>
+    public void Stop()
+    {
+        if (_engine.IsLive || _currentStation is not null) StopStation();
+        else StopAll();
     }
 
     /// <summary>Next track, or the next station when listening to radio.</summary>

@@ -49,6 +49,17 @@
             <EventSetter Event="MouseDoubleClick" Handler="OnTrackDoubleClick" />
         </Style>
 
+        <ContextMenu x:Key="TrayMenu">
+            <MenuItem Header="{Binding NowPlaying}" IsEnabled="False" />
+            <Separator />
+            <MenuItem Header="{Binding PlayPauseLabel}" Click="OnPlayPause" />
+            <MenuItem Header="Next" Click="OnNext" />
+            <MenuItem Header="Previous" Click="OnPrevious" />
+            <Separator />
+            <MenuItem Header="Show Melora" Click="OnTrayShow" />
+            <MenuItem Header="Quit" InputGestureText="Ctrl+Q" Click="OnTrayQuit" />
+        </ContextMenu>
+
         <ContextMenu x:Key="StationMenu">
             <MenuItem Header="Play" Click="OnStationMenuPlay" />
             <MenuItem Header="Edit…" InputGestureText="F2" Click="OnStationMenuEdit" />

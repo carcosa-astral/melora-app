@@ -2,15 +2,16 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using Melora.Interop;
-using Melora.Library;
 
 namespace Melora;
 
 public partial class SettingsWindow : Window
 {
-    public SettingsWindow(LibraryService music, LibraryService mixes)
+    public SettingsWindow(MainViewModel vm)
     {
         InitializeComponent();
+        DataContext = vm;
+        var (music, mixes) = (vm.Music.Service, vm.Mixes.Service);
         MusicSection.Bind(music, mixes, "Music folders",
             "Melora watches these folders and picks up new or changed files on its own.");
         MixesSection.Bind(mixes, music, "Mixes folders",

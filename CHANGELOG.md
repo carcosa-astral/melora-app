@@ -5,6 +5,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-21
+
+Milestone 3: desktop integration.
+
+### Added
+- Tray icon. Left-click shows or hides Melora; right-click opens a menu with what's playing,
+  play/pause, next, previous, Show Melora and Quit. The tooltip shows the current track or station.
+- Closing or minimizing the window sends Melora to the tray. Both can be turned off in Settings.
+  The first time it happens, a notification explains how to get Melora back.
+- Windows media overlay: the volume flyout and lock screen show the title, artist, album, cover art
+  and progress, with working play/pause, next, previous and seek. Radio shows the station and live title.
+- Keyboard media keys (play/pause, next, previous, stop), through the same overlay.
+- Launching Melora while it's already running brings the running copy back. Each portable folder is its own instance.
+- Ctrl+Q quits.
+- App icon for the exe, windows and tray.
+
+### Changed
+- Melora now targets Windows 10 version 1809 or later, for the media overlay.
+
 ## [0.2.0] - 2026-10-21
 
 Milestone 2: Mixes and Radio.

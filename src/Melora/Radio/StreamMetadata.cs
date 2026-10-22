@@ -21,6 +21,14 @@ public static class StreamMetadata
         return Clean(meta[start..end]);
     }
 
+    /// <summary>Splits a stream title like "Artist - Title" at the first " - ". Either part may be null.</summary>
+    public static (string? Artist, string? Title) SplitArtistTitle(string? streamTitle)
+    {
+        if (Clean(streamTitle) is not { } text) return (null, null);
+        var dash = text.IndexOf(" - ", StringComparison.Ordinal);
+        return dash < 0 ? (null, text) : (Clean(text[..dash]), Clean(text[(dash + 3)..]));
+    }
+
     /// <summary>Builds "Artist - Title" from Ogg/Vorbis comments such as <c>ARTIST=...</c> and <c>TITLE=...</c>.</summary>
     public static string? FromVorbisComments(IEnumerable<string> comments)
     {

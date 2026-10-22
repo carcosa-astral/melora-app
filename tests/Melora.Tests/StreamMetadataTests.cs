@@ -22,6 +22,15 @@ public class StreamMetadataTests
     public void FromVorbisComments_TitleOnly() =>
         Assert.Equal("Station ID", StreamMetadata.FromVorbisComments(["title=Station ID"]));
 
+    [Theory]
+    [InlineData("Boards of Canada - Roygbiv", "Boards of Canada", "Roygbiv")]
+    [InlineData("Jay-Z - 99 Problems", "Jay-Z", "99 Problems")]
+    [InlineData("A - B - C", "A", "B - C")]
+    [InlineData("Station ID", null, "Station ID")]
+    [InlineData("  ", null, null)]
+    public void SplitArtistTitle(string input, string? artist, string? title) =>
+        Assert.Equal((artist, title), StreamMetadata.SplitArtistTitle(input));
+
     [Fact]
     public void HeaderValue_FindsIcyName() =>
         Assert.Equal("Groove Salad", StreamMetadata.HeaderValue(["Content-Type: audio/mpeg", "icy-name: Groove Salad", "icy-br:128"], "icy-name"));

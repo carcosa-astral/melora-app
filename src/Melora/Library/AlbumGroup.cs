@@ -40,7 +40,7 @@ public sealed class AlbumGroup : ObservableObject
     {
         try
         {
-            var bytes = FindFolderCover() ?? ReadEmbeddedCover();
+            var bytes = ReadArtBytes();
             if (bytes is null) return;
 
             var image = new BitmapImage();
@@ -57,6 +57,19 @@ public sealed class AlbumGroup : ObservableObject
         catch
         {
             // Unreadable art just leaves the placeholder.
+        }
+    }
+
+    /// <summary>The raw cover image (folder image first, then embedded art), or null. Reads from disk.</summary>
+    public byte[]? ReadArtBytes()
+    {
+        try
+        {
+            return FindFolderCover() ?? ReadEmbeddedCover();
+        }
+        catch
+        {
+            return null;
         }
     }
 

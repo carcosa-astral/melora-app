@@ -20,6 +20,9 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | Library | Watched folders, rescanned automatically when files change |
 | Mixes | Their own folders and a flat list; double-click to play, shuffle works here too. A mixes folder inside a music folder only shows up in Mixes |
 | Radio | Paste an address (direct stream, `.pls` or `.m3u`), check it, name it, save. Shows what the station is playing live. MP3, AAC, Ogg Vorbis and Opus streams |
+| Tray | Close and minimize to the tray (each can be turned off in Settings). Left-click the icon to show or hide Melora; right-click for play/pause, next, previous and Quit. The tooltip shows what's playing |
+| Media keys | Keyboard media keys and the Windows media overlay (volume flyout, lock screen) show the track, cover art and progress, and control playback |
+| One instance | Launching Melora again brings the running copy back instead of starting a second one |
 | Look | Dark theme, Mica backdrop on Windows 11, IBM Plex Sans and Plex Mono (bundled, so no font install needed) |
 | Portable | Everything lives next to `Melora.exe`; nothing is written to AppData or the registry |
 
@@ -31,6 +34,7 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | `Enter` | Play the selected track |
 | `Ctrl` + `→` | Next track |
 | `Ctrl` + `←` | Previous track (restarts the track if more than 3 s in) |
+| `Ctrl` + `Q` | Quit (closing the window only hides Melora to the tray) |
 | `F2` | Edit the selected station |
 | `Del` | Delete the selected station |
 
@@ -52,7 +56,7 @@ Folders on the same drive as Melora are stored as relative paths, so a copy on a
 
 ## Building
 
-Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) on Windows x64.
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) on Windows 10 (1809) or later, x64.
 
 ```bash
 dotnet build src/Melora
@@ -82,10 +86,11 @@ src/Melora/
 ├── Library/      SQLite database, folder scanning and watching, track and album models
 ├── Radio/        Stations, stream checks, ICY / Ogg metadata parsing
 ├── Playback/     Play order: in-order, shuffle with artist and album spread, repeat
-├── Interop/      Mica and dark title bar
+├── Interop/      Mica and dark title bar, tray icon, Windows media overlay
 ├── Assets/Fonts/ IBM Plex (SIL Open Font License)
 └── *.xaml        Main window and settings
 tests/Melora.Tests/  Unit tests (xUnit)
+tools/make-icon.ps1  Renders Assets/Melora.ico
 lib/bass/         Native BASS libraries (x64)
 ```
 
@@ -93,7 +98,7 @@ lib/bass/         Native BASS libraries (x64)
 
 1. ~~**Core player**: playback, transport, seek, volume, Music library grouped by album with art~~
 2. ~~**Mixes + Radio**: the Mixes library, and radio stations with a naming step and live stream titles~~
-3. **Desktop integration**: tray icon, minimize/close to tray, media keys, Windows media overlay
+3. ~~**Desktop integration**: tray icon, minimize/close to tray, media keys, Windows media overlay~~
 4. **Scrobbling**: Last.fm and ListenBrainz, with an offline queue (Music and Mixes only)
 5. **Polish**: accent color from album art, resizable columns, remembered window and column state
 
