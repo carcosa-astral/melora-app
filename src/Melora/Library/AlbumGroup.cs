@@ -5,11 +5,20 @@ using System.Windows.Media.Imaging;
 namespace Melora.Library;
 
 /// <summary>An album as shown in the list: header text plus lazily loaded cover art.</summary>
+/// <remarks>
+/// The decoded art is only held weakly. While its row is on screen the list keeps it alive; once
+/// scrolled away it can be collected, and is read from disk again if the row comes back.
+/// </remarks>
 public sealed class AlbumGroup : ObservableObject
 {
     static readonly string[] CoverNames = ["cover", "folder", "front", "album"];
     static readonly string[] CoverExtensions = [".jpg", ".jpeg", ".png"];
-    const int ArtDecodeWidth = 360;
+
+    /// <summary>Album headers in Music are 168 px.</summary>
+    public const int AlbumArtSize = 168;
+
+    /// <summary>DJ pictures on Mixes headings are 44 px.</summary>
+    public const int DjArtSize = 44;
 
     public required string Title { get; init; }
     public required string Artist { get; init; }
@@ -20,19 +29,24 @@ public sealed class AlbumGroup : ObservableObject
 
     public string Subtitle => Year > 0 ? $"{Artist}  ·  {Year}" : Artist;
 
-    ImageSource? _art;
-    bool _artRequested;
+    /// <summary>The size the art is shown at, in device-independent pixels.</summary>
+    public int ArtSize { get; init; } = AlbumArtSize;
+
+    readonly WeakReference<ImageSource?> _art = new(null);
+    bool _loading;
+    bool _noArt;
 
     public ImageSource? Art
     {
         get
         {
-            if (!_artRequested)
+            if (_art.TryGetTarget(out var art)) return art;
+            if (!_loading && !_noArt)
             {
-                _artRequested = true;
+                _loading = true;
                 Task.Run(LoadArt);
             }
-            return _art;
+            return null;
         }
     }
 
@@ -41,23 +55,42 @@ public sealed class AlbumGroup : ObservableObject
         try
         {
             var bytes = ReadArtBytes();
-            if (bytes is null) return;
+            if (bytes is null)
+            {
+                _noArt = true;
+                return;
+            }
 
-            var image = new BitmapImage();
-            image.BeginInit();
-            image.CacheOption = BitmapCacheOption.OnLoad;
-            image.DecodePixelWidth = ArtDecodeWidth;
-            image.StreamSource = new MemoryStream(bytes);
-            image.EndInit();
-            image.Freeze();
-
-            _art = image;
+            _art.SetTarget(Decode(bytes, ArtSize));
             OnPropertyChanged(nameof(Art));
         }
         catch
         {
             // Unreadable art just leaves the placeholder.
+            _noArt = true;
         }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    /// <summary>Decodes an image for showing at <paramref name="size"/> pixels wide. Usable from any thread.</summary>
+    public static ImageSource Decode(byte[] bytes, int size)
+    {
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        // Twice the shown size stays sharp up to 200% display scaling.
+        image.DecodePixelWidth = size * 2;
+        image.StreamSource = new MemoryStream(bytes);
+        image.EndInit();
+
+        // A BitmapImage keeps its source stream (the whole original file) for as long as it
+        // lives; a copy of just the decoded pixels lets that go.
+        var pixels = new CachedBitmap(image, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+        pixels.Freeze();
+        return pixels;
     }
 
     Task<Color?>? _accent;

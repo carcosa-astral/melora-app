@@ -42,4 +42,8 @@ public sealed class Station : ObservableObject
     }
 
     public string Subtitle => NowPlaying ?? Host;
+
+    System.Windows.Media.ImageSource? _art;
+    /// <summary>The cover of the song playing now, when one was found online.</summary>
+    public System.Windows.Media.ImageSource? Art { get => _art; set => Set(ref _art, value); }
 }

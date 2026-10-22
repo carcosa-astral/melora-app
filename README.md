@@ -21,7 +21,7 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | Repeat | Off, all, one |
 | Library | Watched folders, rescanned automatically when files change |
 | Mixes | Their own folders, grouped A–Z by DJ: the folder each mix sits in (`Mixes\DJ Name\...`), then by date, oldest first (a date in the title like "(2020-10-14)", or the year tag). Double-click to play; shuffle works here too. A mixes folder inside a music folder only shows up in Mixes |
-| Radio | Paste an address (direct stream, `.pls` or `.m3u`), check it, name it, save. Shows what the station is playing live. MP3, AAC, Ogg Vorbis and Opus streams |
+| Radio | Paste an address (direct stream, `.pls` or `.m3u`), check it, name it, save. Shows what the station is playing live, with the song's cover (looked up on iTunes and Deezer; can be turned off). MP3, AAC, Ogg Vorbis and Opus streams |
 | Tray | Minimizing sends Melora to the system tray (can be turned off in Settings); closing the window quits. Left-click the icon to show or hide Melora; right-click for play/pause, next, previous and Quit. The tooltip shows what's playing |
 | Media keys | Keyboard media keys and the Windows media overlay (volume flyout, lock screen) show the track, cover art and progress, and control playback |
 | Scrobbling | Last.fm and ListenBrainz, set up in Settings. Counts a play after half the track or 4 minutes of actual listening; radio and tracks under 30 s are skipped, mixes optional. Plays made offline are queued and sent later |
@@ -112,7 +112,11 @@ dotnet test
 dotnet publish src/Melora -p:PublishProfile=Portable
 ```
 
-This produces a self-contained folder in `dist\Melora\` (about 85 MB, with the .NET runtime included and compressed into `Melora.exe`). Copy that folder anywhere; no installer is needed.
+This produces a self-contained folder in `dist\Melora\` (about 250 MB, with the .NET runtime included in `Melora.exe`). Copy that folder anywhere; no installer is needed.
+
+The exe is deliberately not compressed and is compiled ahead of time (ReadyToRun). That makes it bigger,
+but Melora starts in about 0.65 s and uses about 55 MB of memory, against about 1 s and 140 MB compressed.
+The first launch of a new exe can take a while as Windows Defender scans it once.
 
 ## Project layout
 

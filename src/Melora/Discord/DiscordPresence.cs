@@ -42,13 +42,10 @@ public sealed class DiscordPresence : ObservableObject, IDisposable
     string? _connectedId;
     DateTimeOffset _lastAttempt = DateTimeOffset.MinValue;
 
-    public DiscordPresence(LibraryDb db)
+    public DiscordPresence(LibraryDb db, CoverLookup covers)
     {
         _db = db;
-        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd($"Melora/{version}");
-        _covers = new CoverLookup(http, db);
+        _covers = covers;
         _status = Enabled ? Idle : "Off";
     }
 

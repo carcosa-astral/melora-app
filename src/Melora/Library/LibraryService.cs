@@ -68,6 +68,7 @@ public sealed partial class LibraryService : IDisposable
                     Artist = albumArtist,
                     Year = row.Year,
                     SampleTrackPath = path,
+                    ArtSize = _kind == LibraryKind.Mixes ? AlbumGroup.DjArtSize : AlbumGroup.AlbumArtSize,
                 };
                 groups[key] = group;
             }

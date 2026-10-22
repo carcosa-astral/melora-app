@@ -162,3 +162,20 @@ public class ArtistPhotoTests
             Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(body) });
     }
 }
+
+public class CoverPickTests
+{
+    [Fact]
+    public void Remix_GetsTheRemixCover_WhenListed_ElseTheOriginal()
+    {
+        var query = new CoverQuery("Jaytech", null, "Genesis (Christopher Lobsinger Remix)");
+        (string?, string?, string?)[] both =
+        [
+            ("Jaytech", "Genesis", "https://x/original.jpg"),
+            ("Jaytech", "Genesis (Christopher Lobsinger Remix)", "https://x/remix.jpg"),
+        ];
+        Assert.Equal("https://x/remix.jpg", CoverLookup.Pick(query, both));
+        Assert.Equal("https://x/original.jpg", CoverLookup.Pick(query, both.Take(1)));
+        Assert.Null(CoverLookup.Pick(query, [("Someone Else", "Genesis", "https://x/other.jpg")]));
+    }
+}

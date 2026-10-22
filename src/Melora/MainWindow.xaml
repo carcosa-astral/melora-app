@@ -185,6 +185,13 @@
                                Foreground="{StaticResource TextDimBrush}"
                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
+                <!-- The cover of the song playing, when one was found; covers the radio glyph. -->
+                <Border x:Name="Cover" Width="36" Height="36" CornerRadius="18" HorizontalAlignment="Left"
+                        Visibility="Collapsed">
+                    <Border.Background>
+                        <ImageBrush ImageSource="{Binding Art}" Stretch="UniformToFill" />
+                    </Border.Background>
+                </Border>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock x:Name="NameText" Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontSize="13.5" />
                     <TextBlock Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" FontSize="12"
@@ -195,6 +202,9 @@
                 <DataTrigger Binding="{Binding IsPlaying}" Value="True">
                     <Setter TargetName="NameText" Property="Foreground" Value="{DynamicResource AccentBrush}" />
                     <Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Art, Converter={x:Static local:NotNullConverter.Instance}}" Value="True">
+                    <Setter TargetName="Cover" Property="Visibility" Value="Visible" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>

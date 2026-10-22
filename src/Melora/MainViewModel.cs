@@ -31,6 +31,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public TrackLibrary Mixes { get; }
     public Scrobbler Scrobbler { get; }
     public DiscordPresence Discord { get; }
+    public CoverLookup Covers { get; }
     public ObservableCollection<Station> Stations { get; } = [];
 
     public MainViewModel()
@@ -43,7 +44,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Music = new TrackLibrary(music, groupBy: nameof(Track.Group));
         Mixes = new TrackLibrary(mixes, groupBy: nameof(Track.Collection));
         Scrobbler = new Scrobbler(_db);
-        Discord = new DiscordPresence(_db);
+        Covers = CoverLookup.Create(_db);
+        Discord = new DiscordPresence(_db, Covers);
 
         foreach (var library in new[] { Music, Mixes })
         {
@@ -61,10 +63,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (e.PropertyName is nameof(TrackLibrary.IsScanning)) OnPropertyChanged(nameof(IsScanning));
     }
 
-    /// <summary>Starts audio, shows the libraries from the database, then rescans in the background.</summary>
+    /// <summary>
+    /// Shows the libraries from the database, starts audio once they're on screen, then rescans in
+    /// the background. Loading the audio plugins can take most of a second on a cold start, so it
+    /// waits until there's something to look at.
+    /// </summary>
     public async Task StartAsync()
     {
-        _engine.Initialize();
         _engine.Ended += generation => _dispatcher.BeginInvoke(() =>
         {
             if (generation == _engine.Generation) OnEnded();
@@ -94,6 +99,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             lib.Reload();
             lib.Service.Rewatch();
         }
+
+
+        // Let the window lay out and draw the list before loading the audio plugins.
+        await _dispatcher.InvokeAsync(() => { }, DispatcherPriority.ContextIdle);
+        _engine.Initialize();
+        _engineReady = true;
 
         _timer.Start();
         Discord.Start();
@@ -406,8 +417,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     static List<Track> VisibleTracks(TrackLibrary library) => library.View?.Cast<Track>().ToList() ?? [];
 
+    /// <summary>Set once the audio engine has started, just after the window first shows the libraries.</summary>
+    bool _engineReady;
+
     /// <summary>Double-click on a track: play its library's list starting there.</summary>
-    public void PlayFrom(Track track) => PlayTrack(_queue.Start(VisibleTracks(LibraryFor(track.Library)), track));
+    public void PlayFrom(Track track)
+    {
+        if (_engineReady) PlayTrack(_queue.Start(VisibleTracks(LibraryFor(track.Library)), track));
+    }
 
     /// <summary>
     /// Play/pause. Radio stops rather than pauses, since a paused live stream just falls behind.
@@ -415,6 +432,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// </summary>
     public void PlayPause(object? selected)
     {
+        if (!_engineReady) return;
         if (_engine.IsLoaded)
         {
             if (_engine.IsLive) { StopStation(); return; }
@@ -531,6 +549,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     /// <summary>Tunes in to a station. Connecting can take a few seconds; the UI shows it meanwhile.</summary>
     public async Task PlayStation(Station station)
     {
+        if (!_engineReady) return;
         _currentTrack = null;
         Scrobbler.TrackStopped();
         ClearStation();
@@ -568,6 +587,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _engine.Stop();
         IsPlaying = false;
         _streamTitle = null;
+        UpdateRadioArt();
         _streamStatus = "Stopped";
         FormatText = "";
         OnNowPlayingChanged();
@@ -576,6 +596,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     void ClearStation()
     {
         if (_currentStation is null) return;
+        _radioArtKey = null;
+        SetRadioArt(_currentStation, null, null);
         _currentStation.IsPlaying = false;
         _currentStation.NowPlaying = null;
         _currentStation = null;
@@ -612,6 +634,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _streamStatus = "Stream ended";
         FormatText = "";
         OnNowPlayingChanged();
+        UpdateRadioArt();
     }
 
     void UpdateStreamTitle()
@@ -619,6 +642,64 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (_currentStation is null) return;
         _streamTitle = _engine.StreamTitle;
         OnNowPlayingChanged();
+        UpdateRadioArt();
+    }
+
+    // ---- Radio covers ----
+
+    /// <summary>Look up the cover of the song a station is playing (on iTunes, then Deezer).</summary>
+    public bool RadioCovers
+    {
+        get => _db.GetSetting("radioCovers") != "0";
+        set
+        {
+            _db.SetSetting("radioCovers", value ? "1" : "0");
+            OnPropertyChanged();
+            _radioArtKey = null;
+            UpdateRadioArt();
+        }
+    }
+
+    byte[]? _radioArt;
+    string? _radioArtKey;
+
+    /// <summary>The cover of the song on the radio, as found online; null while there's none.</summary>
+    public byte[]? RadioArt => _radioArt;
+
+    async void UpdateRadioArt()
+    {
+        var station = _currentStation;
+        var title = _streamTitle;
+        var key = station is null ? null : $"{station.Id}|{title}";
+        if (key == _radioArtKey) return; // same song
+        _radioArtKey = key;
+        SetRadioArt(station, null, null);
+
+        if (station is null || !RadioCovers || StreamMetadata.SplitArtistTitle(title) is not (string artist, string song)) return;
+        var url = await Covers.FindAsync(new CoverQuery(artist, null, song));
+        var bytes = url is null ? null : await Covers.DownloadAsync(url);
+        if (bytes is null || key != _radioArtKey) return;
+
+        try
+        {
+            var image = await Task.Run(() => AlbumGroup.Decode(bytes, StationArtSize));
+            if (key == _radioArtKey) SetRadioArt(station, bytes, image);
+        }
+        catch
+        {
+            // Not an image after all: no cover.
+        }
+    }
+
+    /// <summary>Station rows show the cover at 36 px.</summary>
+    const int StationArtSize = 36;
+
+    void SetRadioArt(Station? station, byte[]? bytes, System.Windows.Media.ImageSource? image)
+    {
+        if (station is not null) station.Art = image;
+        if (_radioArt == bytes) return;
+        _radioArt = bytes;
+        OnPropertyChanged(nameof(RadioArt));
     }
 
     string DescribeFormat()

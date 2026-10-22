@@ -5,7 +5,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- Covers for songs on the radio: the station's row and the Windows media overlay show the cover of the
+  song playing, and the accent colour follows it (with "Tint Melora…" on). Stations don't send pictures,
+  so covers are looked up on iTunes and Deezer by artist and song name; it can be turned off in Settings.
+- Cover matching prefers an exact title, brackets included, so a remix gets the remix's cover when the
+  store has it, and the original's otherwise.
+
 ### Changed
+- Uses less memory: album and DJ pictures are decoded at the size they're shown (DJ pictures were
+  decoded eight times too large), no longer keep the original image file in memory, and are let go
+  once scrolled out of view. Scrolling through 1,300 mixes went from about 191 MB to 163 MB.
+- The library shows sooner at startup: the audio plugins load just after the window is drawn instead
+  of before, which matters most on a cold start (about 0.7 s).
+- The portable build is no longer compressed, and is compiled ahead of time (ReadyToRun). Memory
+  drops from about 140 MB to 55 MB and the window appears in about 0.65 s instead of 1 s; the folder
+  grows from about 85 MB to 250 MB. This reverses the compression below.
 - Mixes are sorted by date within each DJ, oldest first: the date in the title, like "(2020-10-14)",
   or the year tag. Mixes without either come last, A–Z.
 - On Discord, a mix shows the DJ's photo, found on Deezer by the DJ's folder name (Discord can't show

@@ -137,7 +137,11 @@ public partial class MainWindow : Window
                 UpdateAccent();
                 break;
             case nameof(MainViewModel.AccentFromArt):
-                _accentAlbum = null;
+                _accentSource = null;
+                UpdateAccent();
+                break;
+            case nameof(MainViewModel.RadioArt):
+                UpdateOverlay();
                 UpdateAccent();
                 break;
             case nameof(MainViewModel.IsPlaying):
@@ -149,16 +153,22 @@ public partial class MainWindow : Window
 
     // ---- Accent colour from album art ----
 
-    AlbumGroup? _accentAlbum;
+    /// <summary>What the accent was last picked from: the playing album, or the radio song's cover.</summary>
+    object? _accentSource;
 
     async void UpdateAccent()
     {
-        var album = _vm.AccentFromArt ? _vm.CurrentTrack?.Group : null;
-        if (album == _accentAlbum) return;
-        _accentAlbum = album;
+        var source = !_vm.AccentFromArt ? null : (object?)_vm.CurrentTrack?.Group ?? _vm.RadioArt;
+        if (source == _accentSource) return;
+        _accentSource = source;
 
-        var color = album is null ? null : await album.GetAccentAsync();
-        if (album != _accentAlbum) return; // the track changed while the art was being read
+        var color = source switch
+        {
+            AlbumGroup album => await album.GetAccentAsync(),
+            byte[] cover => await Task.Run(() => Accent.FromImage(cover)),
+            _ => null,
+        };
+        if (source != _accentSource) return; // the track changed while the art was being read
         Accent.Apply(color ?? Accent.Default);
     }
 
@@ -223,9 +233,11 @@ public partial class MainWindow : Window
         }
         else if (_vm.CurrentStation is { } station)
         {
-            key = $"station|{station.Id}|{station.Name}|{_vm.StreamTitle}";
+            var cover = _vm.RadioArt;
+            key = $"station|{station.Id}|{station.Name}|{_vm.StreamTitle}|{cover?.Length}";
             var (artist, title) = StreamMetadata.SplitArtistTitle(_vm.StreamTitle);
-            if (key != _overlayKey) _overlay.Show(title ?? station.Name, artist ?? station.Name, station.Name, null);
+            if (key != _overlayKey)
+                _overlay.Show(title ?? station.Name, artist ?? station.Name, station.Name, cover is null ? null : () => cover);
         }
         else
         {

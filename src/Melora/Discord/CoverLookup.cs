@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -27,6 +28,28 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
 {
     static readonly TimeSpan RetryMissesAfter = TimeSpan.FromDays(7);
     const int ITunesSize = 600;
+
+    /// <summary>A lookup with its own web client, identified as Melora.</summary>
+    public static CoverLookup Create(LibraryDb db)
+    {
+        var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3);
+        http.DefaultRequestHeaders.UserAgent.ParseAdd($"Melora/{version}");
+        return new CoverLookup(http, db);
+    }
+
+    /// <summary>Downloads a found cover (for showing it in Melora itself); null if it can't be fetched.</summary>
+    public async Task<byte[]?> DownloadAsync(string url)
+    {
+        try
+        {
+            return await http.GetByteArrayAsync(url);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            return null;
+        }
+    }
 
     public async Task<string?> FindAsync(CoverQuery query)
     {
@@ -82,14 +105,11 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
         var term = Uri.EscapeDataString($"{query.Artist} {(album ? query.Album : query.Title)}");
         var json = await GetJsonAsync($"https://itunes.apple.com/search?term={term}&entity={(album ? "album" : "song")}&limit=15");
 
-        foreach (var result in json?["results"]?.AsArray() ?? [])
-        {
-            var name = result?[album ? "collectionName" : "trackName"]?.GetValue<string>();
-            if (!Matches(query, result?["artistName"]?.GetValue<string>(), name)) continue;
-            if (result?["artworkUrl100"]?.GetValue<string>() is { } art)
-                return art.Replace("100x100bb", $"{ITunesSize}x{ITunesSize}bb");
-        }
-        return null;
+        var art = Pick(query, (json?["results"]?.AsArray() ?? []).Select(result => (
+            result?["artistName"]?.GetValue<string>(),
+            result?[album ? "collectionName" : "trackName"]?.GetValue<string>(),
+            result?["artworkUrl100"]?.GetValue<string>())));
+        return art?.Replace("100x100bb", $"{ITunesSize}x{ITunesSize}bb");
     }
 
     async Task<string?> DeezerAsync(CoverQuery query)
@@ -101,13 +121,10 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
             : $"artist:\"{query.Artist}\" track:\"{query.Title}\"";
         var json = await GetJsonAsync($"https://api.deezer.com/search/{(album ? "album" : "track")}?q={Uri.EscapeDataString(q)}&limit=15");
 
-        foreach (var result in json?["data"]?.AsArray() ?? [])
-        {
-            if (!Matches(query, result?["artist"]?["name"]?.GetValue<string>(), result?["title"]?.GetValue<string>())) continue;
-            var cover = album ? result?["cover_xl"] : result?["album"]?["cover_xl"];
-            if (cover?.GetValue<string>() is { Length: > 0 } url) return url;
-        }
-        return null;
+        return Pick(query, (json?["data"]?.AsArray() ?? []).Select(result => (
+            result?["artist"]?["name"]?.GetValue<string>(),
+            result?["title"]?.GetValue<string>(),
+            (album ? result?["cover_xl"] : result?["album"]?["cover_xl"])?.GetValue<string>())));
     }
 
     async Task<string?> DeezerArtistAsync(string artist)
@@ -135,10 +152,20 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
 
     // ---- Matching ----
 
-    static bool Matches(CoverQuery query, string? artist, string? name) =>
-        artist is not null && name is not null
-        && SameName(query.Artist, artist)
-        && SameName(query.Album ?? query.Title ?? "", name);
+    /// <summary>
+    /// The picture of the best search result: one whose name matches exactly, brackets included
+    /// (so "Genesis (Christopher Lobsinger Remix)" gets the remix's cover), or else the first that
+    /// matches loosely (the original's cover).
+    /// </summary>
+    public static string? Pick(CoverQuery query, IEnumerable<(string? Artist, string? Name, string? Url)> results)
+    {
+        var name = query.Album ?? query.Title ?? "";
+        var usable = results
+            .Where(r => r is { Artist: not null, Name: not null, Url.Length: > 0 } && SameName(query.Artist, r.Artist!))
+            .ToList();
+        var exact = usable.FirstOrDefault(r => Normalize(r.Name!, keepBrackets: true) == Normalize(name, keepBrackets: true));
+        return exact.Url ?? usable.FirstOrDefault(r => SameName(name, r.Name!)).Url;
+    }
 
     /// <summary>
     /// Loose name comparison: ignores case, accents, punctuation, a leading "The" and anything in
@@ -153,9 +180,9 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
         return shorter.Length >= 4 && longer.StartsWith(shorter, StringComparison.Ordinal);
     }
 
-    public static string Normalize(string name)
+    public static string Normalize(string name, bool keepBrackets = false)
     {
-        var text = Brackets().Replace(name, " ").Replace("&", " and ").Normalize(NormalizationForm.FormD);
+        var text = (keepBrackets ? name : Brackets().Replace(name, " ")).Replace("&", " and ").Normalize(NormalizationForm.FormD);
         var result = new StringBuilder(text.Length);
         foreach (var c in text)
         {
