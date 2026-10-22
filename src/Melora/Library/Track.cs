@@ -9,6 +9,9 @@ public sealed class Track : ObservableObject
     public required string Artist { get; init; }
     public required AlbumGroup Group { get; init; }
     public LibraryKind Library { get; init; }
+
+    /// <summary>For mixes: the DJ, i.e. the top-level folder the mix sits in under a mixes folder.</summary>
+    public string Collection { get; init; } = "";
     public int TrackNo { get; init; }
     public int DiscNo { get; init; }
     public TimeSpan Duration { get; init; }

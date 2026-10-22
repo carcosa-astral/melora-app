@@ -35,8 +35,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         LibraryService mixes = null!;
         var music = new LibraryService(_db, LibraryKind.Music, () => mixes.Folders);
         mixes = new LibraryService(_db, LibraryKind.Mixes, () => music.Folders);
-        Music = new TrackLibrary(music, groupByAlbum: true);
-        Mixes = new TrackLibrary(mixes, groupByAlbum: false);
+        Music = new TrackLibrary(music, groupBy: nameof(Track.Group));
+        Mixes = new TrackLibrary(mixes, groupBy: nameof(Track.Collection));
 
         foreach (var library in new[] { Music, Mixes })
         {
@@ -71,7 +71,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _queue.SetShuffle(_db.GetSetting("shuffle") == "1");
         _queue.Repeat = Enum.TryParse<RepeatMode>(_db.GetSetting("repeat"), out var r) ? r : RepeatMode.All;
         _tab = Enum.TryParse<LibraryTab>(_db.GetSetting("tab"), out var t) ? t : LibraryTab.Music;
-        _closeToTray = _db.GetSetting("closeToTray") != "0";
         _minimizeToTray = _db.GetSetting("minimizeToTray") != "0";
         OnPropertyChanged(nameof(Volume));
         OnPropertyChanged(nameof(Shuffle));
@@ -134,14 +133,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     TrackLibrary LibraryFor(LibraryKind kind) => kind == LibraryKind.Mixes ? Mixes : Music;
 
     // ---- Window behaviour ----
-
-    bool _closeToTray = true;
-    /// <summary>The close button hides Melora to the tray instead of quitting.</summary>
-    public bool CloseToTray
-    {
-        get => _closeToTray;
-        set { if (Set(ref _closeToTray, value)) _db.SetSetting("closeToTray", value ? "1" : "0"); }
-    }
 
     bool _minimizeToTray = true;
     /// <summary>Minimizing hides Melora to the tray instead of the taskbar.</summary>
@@ -514,12 +505,23 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             t.IsPlaying = path is not null && string.Equals(t.Path, path, StringComparison.OrdinalIgnoreCase);
     }
 
+    // Ticks are 250 ms: re-read the stream title every 3 s.
+    const int TitleCheckTicks = 12;
+    int _titleCheckTicks;
+
     void Tick()
     {
         if (_engine.IsLive)
         {
             _listened = _engine.Position;
             OnPropertyChanged(nameof(TimeText));
+
+            // Some decoders never send the "title changed" event, so check now and then too.
+            if (++_titleCheckTicks >= TitleCheckTicks)
+            {
+                _titleCheckTicks = 0;
+                if (_engine.StreamTitle != _streamTitle) UpdateStreamTitle();
+            }
             return;
         }
 

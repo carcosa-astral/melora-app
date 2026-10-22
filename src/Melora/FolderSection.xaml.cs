@@ -36,7 +36,7 @@ public partial class FolderSection : UserControl
         foreach (var folder in folders)
         {
             if (TryAddFolder(_library, _other, folder) is { } problem)
-                MessageBox.Show(Window.GetWindow(this)!, problem, "Melora", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageDialog.Inform(Window.GetWindow(this), "Folder not added", problem);
         }
         Refresh();
     }
@@ -58,7 +58,7 @@ public partial class FolderSection : UserControl
     public static string? TryAddFolder(LibraryService library, LibraryService other, string folder)
     {
         if (other.Folders.Any(f => string.Equals(f, folder, StringComparison.OrdinalIgnoreCase)))
-            return $"“{folder}” is already in your {other.Kind} library.";
+            return $"“{folder}” is already in your {other.Kind} library. A folder can only be in one.";
 
         library.AddFolder(folder);
         return null;

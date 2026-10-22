@@ -114,8 +114,9 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
+                        <!-- Runs on to the thumb's centre (half its 12px width), so 100% fills to the end. -->
                         <Grid Background="Transparent">
-                            <Border Height="4" CornerRadius="2" Background="{StaticResource AccentBrush}" />
+                            <Border Height="4" CornerRadius="2" Background="{StaticResource AccentBrush}" Margin="6,0,-6,0" />
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -140,7 +141,8 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
                         <Grid Height="20" Background="Transparent">
-                            <Border Height="4" CornerRadius="2" Background="{StaticResource SliderTrackBrush}" />
+                            <!-- Inset by half the thumb so the track spans exactly the thumb's travel. -->
+                            <Border Height="4" CornerRadius="2" Background="{StaticResource SliderTrackBrush}" Margin="6,0" />
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="Slider.DecreaseLarge" Style="{StaticResource SliderFill}" />

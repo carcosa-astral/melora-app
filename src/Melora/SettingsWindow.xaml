@@ -15,8 +15,7 @@
         <local:FolderSection x:Name="MixesSection" Margin="0,28,0,0" />
 
         <TextBlock Text="Window" FontSize="16" FontWeight="SemiBold" Margin="0,28,0,10" />
-        <CheckBox Content="Closing the window keeps Melora running in the tray" IsChecked="{Binding CloseToTray}" />
-        <CheckBox Content="Minimizing sends Melora to the tray" IsChecked="{Binding MinimizeToTray}" Margin="0,10,0,0" />
+        <CheckBox Content="Minimizing sends Melora to the system tray" IsChecked="{Binding MinimizeToTray}" />
 
         <Button Style="{StaticResource TextButton}" Content="Done" IsDefault="True" IsCancel="True"
                 HorizontalAlignment="Right" Margin="0,24,0,0" Click="OnDone" />

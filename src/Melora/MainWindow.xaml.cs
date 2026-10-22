@@ -21,7 +21,6 @@ public partial class MainWindow : Window
     TrayIcon? _tray;
     MediaOverlay? _overlay;
     string? _overlayKey;
-    bool _quitting;
     WindowState _restoreState = WindowState.Normal;
 
     public MainWindow()
@@ -65,19 +64,9 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Melora", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageDialog.Inform(this, "Melora couldn't start", ex.Message);
             Close();
         }
-    }
-
-    protected override void OnClosing(CancelEventArgs e)
-    {
-        if (!_quitting && _vm.CloseToTray)
-        {
-            e.Cancel = true;
-            HideToTray();
-        }
-        base.OnClosing(e);
     }
 
     protected override void OnClosed(EventArgs e)
@@ -103,7 +92,7 @@ public partial class MainWindow : Window
         Hide();
         if (_vm.TrayHintShown) return;
         _vm.TrayHintShown = true;
-        _tray?.ShowBalloon("Melora is still running", "Click the tray icon to bring it back. Quit from its menu.");
+        _tray?.ShowBalloon("Melora is in the system tray", "Click the tray icon to bring it back.");
     }
 
     /// <summary>Brings the window back, e.g. from the tray or when Melora is launched again.</summary>
@@ -120,11 +109,7 @@ public partial class MainWindow : Window
         else ShowFromTray();
     }
 
-    void Quit()
-    {
-        _quitting = true;
-        Close();
-    }
+    void Quit() => Close();
 
     void OnTrayShow(object sender, RoutedEventArgs e) => ShowFromTray();
     void OnTrayQuit(object sender, RoutedEventArgs e) => Quit();
@@ -264,7 +249,7 @@ public partial class MainWindow : Window
         foreach (var folder in folders)
         {
             if (FolderSection.TryAddFolder(library, other, folder) is { } problem)
-                MessageBox.Show(this, problem, "Melora", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageDialog.Inform(this, "Folder not added", problem);
         }
         await _vm.RescanAsync();
     }
@@ -289,9 +274,9 @@ public partial class MainWindow : Window
 
     void DeleteStation(Station station)
     {
-        var answer = MessageBox.Show(this, $"Delete “{station.Name}” from your stations?", "Melora",
-            MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
-        if (answer == MessageBoxResult.Yes) _vm.DeleteStation(station);
+        if (MessageDialog.Confirm(this, $"Delete “{station.Name}”?",
+                "It will be removed from your stations. You can add it again later.", "Delete", destructive: true))
+            _vm.DeleteStation(station);
     }
 
     static Station? MenuStation(object sender) => (sender as FrameworkElement)?.DataContext as Station;

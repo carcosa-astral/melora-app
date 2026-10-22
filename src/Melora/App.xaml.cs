@@ -51,7 +51,7 @@ public partial class App : Application
 
     static void OnUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        MessageBox.Show(e.Exception.Message, "Melora", MessageBoxButton.OK, MessageBoxImage.Error);
+        MessageDialog.Inform(Current.MainWindow, "Something went wrong", e.Exception.Message);
         e.Handled = true;
     }
 }

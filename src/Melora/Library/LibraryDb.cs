@@ -93,13 +93,34 @@ public sealed class LibraryDb
     public void RemoveFolder(LibraryKind library, string fullPath)
     {
         using var db = Open();
+
+        // Compare resolved paths: a folder may be stored relative or absolute.
+        var target = NormalizeFolder(fullPath);
+        var ids = new List<long>();
+        using (var query = db.CreateCommand())
+        {
+            query.CommandText = "SELECT id, path FROM folders WHERE library = $lib";
+            query.Parameters.AddWithValue("$lib", Key(library));
+            using var r = query.ExecuteReader();
+            while (r.Read())
+            {
+                if (string.Equals(NormalizeFolder(AppPaths.FromStored(r.GetString(1))), target, StringComparison.OrdinalIgnoreCase))
+                    ids.Add(r.GetInt64(0));
+            }
+        }
+
         using var cmd = db.CreateCommand();
-        cmd.CommandText = "DELETE FROM folders WHERE library = $lib AND path = $path";
-        cmd.Parameters.AddWithValue("$lib", Key(library));
-        cmd.Parameters.AddWithValue("$path", AppPaths.ToStored(fullPath));
-        cmd.ExecuteNonQuery();
+        cmd.CommandText = "DELETE FROM folders WHERE id = $id";
+        var id = cmd.Parameters.Add("$id", SqliteType.Integer);
+        foreach (var folderId in ids)
+        {
+            id.Value = folderId;
+            cmd.ExecuteNonQuery();
+        }
         // Tracks that are no longer under any folder are dropped by the next scan.
     }
+
+    static string NormalizeFolder(string path) => System.IO.Path.GetFullPath(path).TrimEnd('\\', '/');
 
     // ---- Tracks ----
 

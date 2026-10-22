@@ -45,7 +45,7 @@
         </Style>
 
         <Style x:Key="MixItem" TargetType="ListViewItem" BasedOn="{StaticResource RowItem}">
-            <Setter Property="MinHeight" Value="48" />
+            <Setter Property="MinHeight" Value="34" />
             <EventSetter Event="MouseDoubleClick" Handler="OnTrackDoubleClick" />
         </Style>
 
@@ -113,32 +113,20 @@
             </DataTemplate.Triggers>
         </DataTemplate>
 
-        <!-- Mixes: a flat list, each row with its own thumbnail. -->
+        <!-- Mixes: plain rows under their DJ's heading (the picture is on the heading). -->
         <DataTemplate x:Key="MixRow" DataType="{x:Type lib:Track}">
-            <Grid>
+            <!-- Indented to line up with the DJ name beside the heading's picture. -->
+            <Grid Margin="56,0,0,0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="52" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="0.5*" />
                     <ColumnDefinition Width="80" />
                 </Grid.ColumnDefinitions>
-                <Grid Width="36" Height="36" HorizontalAlignment="Left">
-                    <Border CornerRadius="4" Background="{StaticResource ArtPlaceholderBrush}">
-                        <TextBlock x:Name="Glyph" Text="&#xE8D6;" FontFamily="{StaticResource IconFont}" FontSize="14"
-                                   Foreground="{StaticResource TextFaintBrush}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
-                    <Border CornerRadius="4">
-                        <Border.Background>
-                            <ImageBrush ImageSource="{Binding Group.Art}" Stretch="UniformToFill" />
-                        </Border.Background>
-                    </Border>
-                </Grid>
-                <TextBlock x:Name="TitleText" Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                <TextBlock x:Name="TitleText" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
                            Margin="0,0,16,0" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2" Text="{Binding Artist}" TextTrimming="CharacterEllipsis"
+                <TextBlock Grid.Column="1" Text="{Binding Artist}" TextTrimming="CharacterEllipsis"
                            Foreground="{StaticResource TextDimBrush}" Margin="0,0,16,0" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="3" Text="{Binding LengthText}" FontFamily="{StaticResource MonoFont}" FontSize="12"
+                <TextBlock Grid.Column="2" Text="{Binding LengthText}" FontFamily="{StaticResource MonoFont}" FontSize="12"
                            Foreground="{StaticResource TextDimBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
             <DataTemplate.Triggers>
@@ -358,11 +346,51 @@
 
         <!-- ===== Mixes ===== -->
         <Grid Grid.Row="2" Visibility="{Binding ShowMixes, Converter={StaticResource BoolToVisibility}}">
-            <ListView x:Name="MixesList" Style="{StaticResource ListBase}" Padding="12,12,12,0"
+            <ListView x:Name="MixesList" Style="{StaticResource ListBase}" Padding="12,0,12,0"
                       ItemsSource="{Binding Mixes.View}"
                       ItemTemplate="{StaticResource MixRow}"
                       ItemContainerStyle="{StaticResource MixItem}"
-                      SelectionMode="Extended" />
+                      SelectionMode="Extended">
+                <!-- One heading per DJ (the mix's folder), A to Z. -->
+                <ListView.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.ContainerStyle>
+                            <Style TargetType="GroupItem">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GroupItem">
+                                            <StackPanel Margin="0,20,0,4">
+                                                <StackPanel Orientation="Horizontal" Margin="8,0,0,6">
+                                                    <!-- The DJ's picture: their first mix's folder image or embedded art. -->
+                                                    <Grid Width="44" Height="44" Margin="0,0,12,0">
+                                                        <Border CornerRadius="22" Background="{StaticResource ArtPlaceholderBrush}">
+                                                            <TextBlock Text="&#xE77B;" FontFamily="{StaticResource IconFont}" FontSize="16"
+                                                                       Foreground="{StaticResource TextFaintBrush}"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                        <Border CornerRadius="22">
+                                                            <Border.Background>
+                                                                <ImageBrush ImageSource="{Binding Items[0].Group.Art}" Stretch="UniformToFill" />
+                                                            </Border.Background>
+                                                        </Border>
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold"
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding ItemCount, StringFormat='{}{0}'}" FontSize="12"
+                                                               FontFamily="{StaticResource MonoFont}"
+                                                               Foreground="{StaticResource TextFaintBrush}"
+                                                               VerticalAlignment="Center" Margin="10,2,0,0" />
+                                                </StackPanel>
+                                                <ItemsPresenter />
+                                            </StackPanel>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GroupStyle.ContainerStyle>
+                    </GroupStyle>
+                </ListView.GroupStyle>
+            </ListView>
 
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
                         Visibility="{Binding Mixes.IsEmpty, Converter={StaticResource BoolToVisibility}}">

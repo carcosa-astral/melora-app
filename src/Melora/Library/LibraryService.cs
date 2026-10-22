@@ -39,12 +39,13 @@ public sealed class LibraryService : IDisposable
 
     /// <summary>
     /// Loads the library from the database. Music is sorted by artist, year, album, disc and track;
-    /// Mixes by artist and title.
+    /// Mixes by DJ (their folder) and title.
     /// </summary>
     public List<Track> Load()
     {
         var groups = new Dictionary<string, AlbumGroup>(StringComparer.OrdinalIgnoreCase);
         var tracks = new List<Track>();
+        var roots = _kind == LibraryKind.Mixes ? Folders : [];
 
         foreach (var row in _db.GetTracks(_kind))
         {
@@ -76,6 +77,7 @@ public sealed class LibraryService : IDisposable
                 Artist = artist,
                 Group = group,
                 Library = _kind,
+                Collection = _kind == LibraryKind.Mixes ? CollectionFor(path, roots) : "",
                 TrackNo = row.TrackNo,
                 DiscNo = row.DiscNo,
                 Duration = TimeSpan.FromMilliseconds(row.DurationMs),
@@ -85,7 +87,7 @@ public sealed class LibraryService : IDisposable
         if (_kind == LibraryKind.Mixes)
         {
             return tracks
-                .OrderBy(t => t.Artist, StringComparer.CurrentCultureIgnoreCase)
+                .OrderBy(t => t.Collection, StringComparer.CurrentCultureIgnoreCase)
                 .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
         }
@@ -101,6 +103,26 @@ public sealed class LibraryService : IDisposable
     }
 
     static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>
+    /// The DJ for a mix: the first folder under the mixes folder it lives in
+    /// (Mixes\DJ Kestrel\2024\set.mp3 → "DJ Kestrel"). Mixes sitting directly in the
+    /// mixes folder are grouped under that folder's own name.
+    /// </summary>
+    public static string CollectionFor(string path, IEnumerable<string> roots)
+    {
+        var root = roots
+            .Where(r => IsUnder(path, r))
+            .OrderByDescending(r => r.Length)
+            .FirstOrDefault();
+        if (root is null) return System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path)) ?? "";
+
+        var relative = System.IO.Path.GetRelativePath(root, path);
+        var separator = relative.IndexOfAny(['\\', '/']);
+        return separator > 0
+            ? relative[..separator]
+            : System.IO.Path.GetFileName(root.TrimEnd('\\', '/'));
+    }
 
     /// <summary>Brings the database in line with the folders on disk. Returns true if anything changed.</summary>
     public async Task<bool> ScanAsync()

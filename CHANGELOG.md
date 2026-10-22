@@ -5,6 +5,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+- Mixes are grouped under a heading per DJ, taken from the folder each mix sits in, sorted A–Z.
+  Mixes directly in the mixes folder are grouped under that folder's name. Each DJ heading shows the
+  DJ's picture once (their folder image or embedded art); mix rows no longer repeat it.
+- Closing the window quits Melora again; only minimizing sends it to the system tray.
+- Confirmations and messages use Melora's own dark dialog instead of the Windows message box.
+  Deleting a station shows a red Delete button, with Cancel as the default.
+
+### Fixed
+- Removing a folder in Settings could silently do nothing when the folder was stored as a full path
+  on the same drive as Melora. Folders are now matched however they're stored.
+- The volume and seek bars stopped short of the end at 100%; they now fill all the way.
+- AAC radio stations took up to 50 seconds to start, because AAC went through Windows Media Foundation.
+  Melora now ships the BASS_AAC add-on and AAC stations start in about a second.
+- Radio "now playing" titles could be out of step with the music. Through Media Foundation, AAC streams
+  read about a minute ahead, so titles changed early; the AAC add-on removes that lag. Melora also
+  re-checks the title every few seconds, for decoders that don't announce title changes.
+
 ## [0.3.0] - 2026-10-21
 
 Milestone 3: desktop integration.

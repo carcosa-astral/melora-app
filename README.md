@@ -18,9 +18,9 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | Shuffle | Every track plays once before any repeats, and the same artist or album never plays back-to-back |
 | Repeat | Off, all, one |
 | Library | Watched folders, rescanned automatically when files change |
-| Mixes | Their own folders and a flat list; double-click to play, shuffle works here too. A mixes folder inside a music folder only shows up in Mixes |
+| Mixes | Their own folders, grouped A–Z by DJ: the folder each mix sits in (`Mixes\DJ Name\...`). Double-click to play; shuffle works here too. A mixes folder inside a music folder only shows up in Mixes |
 | Radio | Paste an address (direct stream, `.pls` or `.m3u`), check it, name it, save. Shows what the station is playing live. MP3, AAC, Ogg Vorbis and Opus streams |
-| Tray | Close and minimize to the tray (each can be turned off in Settings). Left-click the icon to show or hide Melora; right-click for play/pause, next, previous and Quit. The tooltip shows what's playing |
+| Tray | Minimizing sends Melora to the system tray (can be turned off in Settings); closing the window quits. Left-click the icon to show or hide Melora; right-click for play/pause, next, previous and Quit. The tooltip shows what's playing |
 | Media keys | Keyboard media keys and the Windows media overlay (volume flyout, lock screen) show the track, cover art and progress, and control playback |
 | One instance | Launching Melora again brings the running copy back instead of starting a second one |
 | Look | Dark theme, Mica backdrop on Windows 11, IBM Plex Sans and Plex Mono (bundled, so no font install needed) |
@@ -34,7 +34,7 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | `Enter` | Play the selected track |
 | `Ctrl` + `→` | Next track |
 | `Ctrl` + `←` | Previous track (restarts the track if more than 3 s in) |
-| `Ctrl` + `Q` | Quit (closing the window only hides Melora to the tray) |
+| `Ctrl` + `Q` | Quit |
 | `F2` | Edit the selected station |
 | `Del` | Delete the selected station |
 
@@ -47,7 +47,7 @@ Melora writes only to a `data` folder beside the exe:
 ```
 Melora\
 ├── Melora.exe
-├── bass.dll, bassflac.dll, bassopus.dll
+├── bass.dll, bassflac.dll, bassopus.dll, bass_aac.dll
 └── data\
     └── melora.db      libraries, folders, stations and settings (SQLite)
 ```

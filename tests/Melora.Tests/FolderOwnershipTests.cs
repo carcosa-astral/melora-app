@@ -19,6 +19,17 @@ public class FolderOwnershipTests
     public void OrdinaryMusicFile_StaysInMusic() =>
         Assert.True(LibraryService.Owns(@"D:\Music\Album\01.flac", Music, [Mixes]));
 
+    [Theory]
+    [InlineData(@"D:\Music\Mixes\DJ Kestrel\set.mp3", "DJ Kestrel")]
+    [InlineData(@"D:\Music\Mixes\DJ Kestrel\2024\Summer\set.mp3", "DJ Kestrel")]
+    [InlineData(@"D:\Music\Mixes\loose-set.mp3", "Mixes")]
+    public void Mixes_AreGroupedByTheirTopLevelFolder(string file, string dj) =>
+        Assert.Equal(dj, LibraryService.CollectionFor(file, [Mixes]));
+
+    [Fact]
+    public void Mixes_UseTheDeepestMatchingMixesFolder() =>
+        Assert.Equal("Mira Vale", LibraryService.CollectionFor(@"D:\Sets\Live\Mira Vale\a.opus", [@"D:\Sets", @"D:\Sets\Live"]));
+
     [Fact]
     public void SimilarlyNamedFolder_IsNotNested() =>
         // "D:\Music\Mixes Old" is not inside "D:\Music\Mixes".

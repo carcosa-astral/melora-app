@@ -9,7 +9,9 @@ public enum StreamResult { Ok, Failed, Superseded }
 /// <summary>Thin wrapper over BASS: one stream at a time (a file or a live URL), plus format info for the status bar.</summary>
 public sealed class AudioEngine : IDisposable
 {
-    static readonly string[] Plugins = ["bassflac.dll", "bassopus.dll"];
+    // bass_aac decodes AAC itself; without it BASS falls back to Media Foundation,
+    // which takes ~50 s to start an AAC radio stream.
+    static readonly string[] Plugins = ["bassflac.dll", "bassopus.dll", "bass_aac.dll"];
 
     readonly SyncProcedure _onEnd;
     readonly SyncProcedure _onMeta;
