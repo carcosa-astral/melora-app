@@ -55,6 +55,25 @@ public sealed class LibraryDb
                 duration_ms  INTEGER NOT NULL DEFAULT 0,
                 started_at   INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS loves (
+                artist TEXT NOT NULL COLLATE NOCASE,
+                title  TEXT NOT NULL COLLATE NOCASE,
+                album  TEXT,
+                mbid   TEXT,
+                loved  INTEGER NOT NULL,
+                PRIMARY KEY (artist, title)
+            );
+            CREATE TABLE IF NOT EXISTS love_queue (
+                service TEXT NOT NULL,
+                artist  TEXT NOT NULL COLLATE NOCASE,
+                title   TEXT NOT NULL COLLATE NOCASE,
+                PRIMARY KEY (service, artist, title)
+            );
+            CREATE TABLE IF NOT EXISTS covers (
+                key        TEXT PRIMARY KEY,
+                url        TEXT,
+                checked_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS settings (
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
@@ -334,6 +353,134 @@ public sealed class LibraryDb
             : "SELECT COUNT(*) FROM scrobbles WHERE service = $service";
         if (service is not null) cmd.Parameters.AddWithValue("$service", service);
         return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    // ---- Loves (one row per track; the queue holds services that haven't been told yet) ----
+
+    /// <summary>Whether a track is loved; null if it's never been loved or un-loved.</summary>
+    public bool? GetLoved(string artist, string title)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT loved FROM loves WHERE artist = $artist AND title = $title";
+        cmd.Parameters.AddWithValue("$artist", artist);
+        cmd.Parameters.AddWithValue("$title", title);
+        return cmd.ExecuteScalar() is long loved ? loved != 0 : null;
+    }
+
+    /// <summary>Loves or un-loves a track here, and queues telling each of <paramref name="services"/>.</summary>
+    public void SetLoved(Love love, IEnumerable<string> services)
+    {
+        using var db = Open();
+        using var tx = db.BeginTransaction();
+        using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO loves (artist, title, album, mbid, loved) VALUES ($artist, $title, $album, $mbid, $loved)
+                ON CONFLICT (artist, title) DO UPDATE SET album = excluded.album, mbid = excluded.mbid, loved = excluded.loved
+                """;
+            cmd.Parameters.AddWithValue("$artist", love.Artist);
+            cmd.Parameters.AddWithValue("$title", love.Title);
+            cmd.Parameters.AddWithValue("$album", (object?)love.Album ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$mbid", (object?)love.RecordingMbid ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$loved", love.Loved ? 1 : 0);
+            cmd.ExecuteNonQuery();
+        }
+        using (var cmd = db.CreateCommand())
+        {
+            cmd.CommandText = "INSERT OR IGNORE INTO love_queue (service, artist, title) VALUES ($service, $artist, $title)";
+            var service = cmd.Parameters.Add("$service", SqliteType.Text);
+            cmd.Parameters.AddWithValue("$artist", love.Artist);
+            cmd.Parameters.AddWithValue("$title", love.Title);
+            foreach (var id in services)
+            {
+                service.Value = id;
+                cmd.ExecuteNonQuery();
+            }
+        }
+        tx.Commit();
+    }
+
+    /// <summary>
+    /// Records what a service says about a track (e.g. loved on the Last.fm website), unless a
+    /// change made in Melora is still waiting to be sent.
+    /// </summary>
+    public void SyncLoved(string artist, string title, bool loved)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO loves (artist, title, loved)
+            SELECT $artist, $title, $loved
+            WHERE NOT EXISTS (SELECT 1 FROM love_queue WHERE artist = $artist AND title = $title)
+            ON CONFLICT (artist, title) DO UPDATE SET loved = excluded.loved
+            """;
+        cmd.Parameters.AddWithValue("$artist", artist);
+        cmd.Parameters.AddWithValue("$title", title);
+        cmd.Parameters.AddWithValue("$loved", loved ? 1 : 0);
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Loves and un-loves a service still has to be told about.</summary>
+    public List<Love> GetPendingLoves(string service)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            SELECT l.artist, l.title, l.album, l.mbid, l.loved
+            FROM love_queue q JOIN loves l ON l.artist = q.artist AND l.title = q.title
+            WHERE q.service = $service
+            """;
+        cmd.Parameters.AddWithValue("$service", service);
+        var result = new List<Love>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            result.Add(new Love(r.GetString(0), r.GetString(1),
+                r.IsDBNull(2) ? null : r.GetString(2),
+                r.IsDBNull(3) ? null : r.GetString(3),
+                r.GetInt64(4) != 0));
+        }
+        return result;
+    }
+
+    public void ClearPendingLove(string service, string artist, string title)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "DELETE FROM love_queue WHERE service = $service AND artist = $artist AND title = $title";
+        cmd.Parameters.AddWithValue("$service", service);
+        cmd.Parameters.AddWithValue("$artist", artist);
+        cmd.Parameters.AddWithValue("$title", title);
+        cmd.ExecuteNonQuery();
+    }
+
+    // ---- Cover art addresses found online, for Discord (url is null when nothing was found) ----
+
+    /// <summary>The cached result for a lookup key: Found is false if it was never looked up.</summary>
+    public (bool Found, string? Url, DateTimeOffset CheckedAt) GetCover(string key)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT url, checked_at FROM covers WHERE key = $key";
+        cmd.Parameters.AddWithValue("$key", key);
+        using var r = cmd.ExecuteReader();
+        if (!r.Read()) return (false, null, default);
+        return (true, r.IsDBNull(0) ? null : r.GetString(0), DateTimeOffset.FromUnixTimeSeconds(r.GetInt64(1)));
+    }
+
+    public void SetCover(string key, string? url)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO covers (key, url, checked_at) VALUES ($key, $url, $at)
+            ON CONFLICT (key) DO UPDATE SET url = excluded.url, checked_at = excluded.checked_at
+            """;
+        cmd.Parameters.AddWithValue("$key", key);
+        cmd.Parameters.AddWithValue("$url", (object?)url ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$at", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        cmd.ExecuteNonQuery();
     }
 
     // ---- Settings ----

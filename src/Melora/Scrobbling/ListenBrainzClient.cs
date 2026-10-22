@@ -66,7 +66,7 @@ public sealed class ListenBrainzClient : IScrobbleService
         if (!IsConnected) return;
         try
         {
-            await PostAsync(BuildPayload("playing_now", [play]));
+            await PostAsync("submit-listens", BuildPayload("playing_now", [play]));
         }
         catch
         {
@@ -79,7 +79,7 @@ public sealed class ListenBrainzClient : IScrobbleService
         if (!IsConnected) return SubmitOutcome.AuthFailed;
         try
         {
-            var status = await PostAsync(BuildPayload(plays.Count == 1 ? "single" : "import", plays));
+            var status = await PostAsync("submit-listens", BuildPayload(plays.Count == 1 ? "single" : "import", plays));
             var outcome = Classify(status);
             if (outcome == SubmitOutcome.AuthFailed) _db.SetSetting("listenbrainz.reconnect", "1");
             return outcome;
@@ -88,6 +88,51 @@ public sealed class ListenBrainzClient : IScrobbleService
         {
             return SubmitOutcome.RetryLater;
         }
+    }
+
+    // ---- Loving ----
+
+    /// <summary>
+    /// ListenBrainz loves recordings by MusicBrainz ID. Tracks tagged with Picard have one; for the
+    /// rest, ListenBrainz is asked to match the artist and title. A track it can't match is refused.
+    /// </summary>
+    public async Task<SubmitOutcome> LoveAsync(Love love)
+    {
+        if (!IsConnected) return SubmitOutcome.AuthFailed;
+        try
+        {
+            var (outcome, mbid) = love.RecordingMbid is { } tagged
+                ? (SubmitOutcome.Sent, tagged)
+                : await LookupRecordingAsync(love.Artist, love.Title, love.Album);
+
+            if (outcome == SubmitOutcome.Sent)
+            {
+                if (mbid is null) return SubmitOutcome.Rejected; // ListenBrainz doesn't know the track
+                var body = new JsonObject { ["recording_mbid"] = mbid, ["score"] = love.Loved ? 1 : 0 };
+                outcome = Classify(await PostAsync("feedback/recording-feedback", body));
+            }
+            if (outcome == SubmitOutcome.AuthFailed) _db.SetSetting("listenbrainz.reconnect", "1");
+            return outcome;
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            return SubmitOutcome.RetryLater;
+        }
+    }
+
+    /// <summary>The MusicBrainz recording ListenBrainz matches to an artist and title (null if none), and how the request went.</summary>
+    async Task<(SubmitOutcome Outcome, string? Mbid)> LookupRecordingAsync(string artist, string title, string? album)
+    {
+        var query = $"artist_name={Uri.EscapeDataString(artist)}&recording_name={Uri.EscapeDataString(title)}";
+        if (album is not null) query += $"&release_name={Uri.EscapeDataString(album)}";
+        using var request = new HttpRequestMessage(HttpMethod.Get, Api + "metadata/lookup/?" + query);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Token", Token);
+        using var response = await _http.SendAsync(request);
+
+        var outcome = Classify(response.StatusCode);
+        if (outcome != SubmitOutcome.Sent) return (outcome, null);
+        var json = JsonNode.Parse(await response.Content.ReadAsStringAsync());
+        return (outcome, json?["recording_mbid"]?.GetValue<string>());
     }
 
     public static SubmitOutcome Classify(HttpStatusCode status) => status switch
@@ -131,9 +176,9 @@ public sealed class ListenBrainzClient : IScrobbleService
         return new JsonObject { ["listen_type"] = listenType, ["payload"] = payload };
     }
 
-    async Task<HttpStatusCode> PostAsync(JsonObject body)
+    async Task<HttpStatusCode> PostAsync(string endpoint, JsonObject body)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, Api + "submit-listens")
+        using var request = new HttpRequestMessage(HttpMethod.Post, Api + endpoint)
         {
             Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"),
         };

@@ -29,6 +29,23 @@ public sealed class Track : ObservableObject
     bool _isPlaying;
     public bool IsPlaying { get => _isPlaying; set => Set(ref _isPlaying, value); }
 
+    /// <summary>The MusicBrainz recording ID from the file's tags (Picard writes one), or null. Reads the file.</summary>
+    public string? ReadRecordingMbid() => ReadTag(Path, tag => tag.MusicBrainzTrackId);
+
+    /// <summary>One tag value from a file, or null if it's empty or the file can't be read.</summary>
+    public static string? ReadTag(string path, Func<TagLib.Tag, string?> read)
+    {
+        try
+        {
+            using var file = TagLib.File.Create(path);
+            return read(file.Tag) is { Length: > 0 } value ? value : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public static string FormatTime(TimeSpan t) =>
         t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
 }

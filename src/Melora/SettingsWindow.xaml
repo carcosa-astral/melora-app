@@ -128,6 +128,29 @@
 
                 <TextBlock Style="{StaticResource Hint}" FontSize="12" Margin="0,12,0,0"
                            Text="Keys and tokens are kept in Melora's data folder, next to Melora.exe." />
+
+                <!-- ===== Discord ===== -->
+                <TextBlock Text="Discord" Style="{StaticResource Heading}" />
+                <CheckBox Content="Show what I'm playing on my Discord profile" IsChecked="{Binding Discord.Enabled}" />
+                <Border Style="{StaticResource Card}" IsEnabled="{Binding Discord.Enabled}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource Hint}">
+                            Discord needs an application to show as “Listening to …”. Create one at
+                            <Hyperlink NavigateUri="https://discord.com/developers/applications" RequestNavigate="OnLink"
+                                       Foreground="{DynamicResource AccentBrush}">discord.com/developers/applications</Hyperlink>
+                            and name it Melora (the name is what people see), then copy its Application ID here.
+                        </TextBlock>
+                        <TextBlock Text="Application ID" Style="{StaticResource FieldLabel}" />
+                        <TextBox Text="{Binding Discord.ApplicationId, UpdateSourceTrigger=PropertyChanged, Delay=600}"
+                                 FontFamily="{StaticResource MonoFont}" FontSize="12" />
+                        <TextBlock Text="{Binding Discord.Status}" Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                   Foreground="{DynamicResource AccentBrush}" />
+                        <CheckBox Content="Show mixes" IsChecked="{Binding Discord.ShowMixes}" Margin="0,12,0,0" />
+                        <CheckBox Content="Show radio" IsChecked="{Binding Discord.ShowRadio}" Margin="0,10,0,0" />
+                    </StackPanel>
+                </Border>
+                <TextBlock Style="{StaticResource Hint}" FontSize="12" Margin="0,12,0,0"
+                           Text="Discord can only show pictures from the web, so album covers are looked up on the Cover Art Archive, iTunes and Deezer by artist and album name. Nothing is sent while this is off." />
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

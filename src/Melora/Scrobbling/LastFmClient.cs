@@ -116,7 +116,52 @@ public sealed class LastFmClient : IScrobbleService
             ["sk"] = SessionKey!,
         };
         for (var i = 0; i < plays.Count; i++) AddPlay(parameters, plays[i], i);
+        return await SendAsync(parameters);
+    }
 
+    // ---- Loving ----
+
+    public async Task<SubmitOutcome> LoveAsync(Love love)
+    {
+        if (!IsConnected) return SubmitOutcome.AuthFailed;
+        var parameters = new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["method"] = love.Loved ? "track.love" : "track.unlove",
+            ["sk"] = SessionKey!,
+            ["artist"] = love.Artist,
+            ["track"] = love.Title,
+        };
+        return await SendAsync(parameters);
+    }
+
+    /// <summary>Whether the connected user has loved this track on Last.fm; null if Last.fm doesn't know it or can't be reached.</summary>
+    public async Task<bool?> GetLovedAsync(string artist, string title)
+    {
+        if (!IsConnected || UserName is not { } user) return null;
+        try
+        {
+            var response = await CallAsync(HttpMethod.Get, new(StringComparer.Ordinal)
+            {
+                ["method"] = "track.getInfo",
+                ["artist"] = artist,
+                ["track"] = title,
+                ["username"] = user,
+            });
+            return response["track"]?["userloved"]?.GetValue<string>() switch
+            {
+                "1" => true,
+                "0" => false,
+                _ => null,
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    async Task<SubmitOutcome> SendAsync(SortedDictionary<string, string> parameters)
+    {
         try
         {
             await CallAsync(HttpMethod.Post, parameters);

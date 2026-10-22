@@ -299,6 +299,7 @@ public partial class MainWindow : Window
     void OnPrevious(object sender, RoutedEventArgs e) => _vm.Previous();
     void OnNext(object sender, RoutedEventArgs e) => _vm.Next();
     void OnRepeat(object sender, RoutedEventArgs e) => _vm.CycleRepeat();
+    void OnLove(object sender, RoutedEventArgs e) => _vm.ToggleLove();
 
     void OnSeekStart(object sender, MouseButtonEventArgs e) => _vm.IsSeeking = true;
 
@@ -313,6 +314,7 @@ public partial class MainWindow : Window
     async void OnSettings(object sender, RoutedEventArgs e)
     {
         new SettingsWindow(_vm) { Owner = this }.ShowDialog();
+        _vm.SettingsChanged();
         await _vm.RescanAsync();
     }
 
@@ -396,6 +398,9 @@ public partial class MainWindow : Window
         {
             case Key.Q when ctrl:
                 Quit();
+                break;
+            case Key.L when ctrl:
+                _vm.ToggleLove();
                 break;
             case Key.Space:
                 _vm.PlayPause(Selected);

@@ -34,6 +34,41 @@ public class PlayQueueTests
     }
 
     [Fact]
+    public void PeekNext_IsWhatNextPlays_WithoutMovingOn()
+    {
+        var tracks = Library(("A", "One", 3));
+        var queue = new PlayQueue { Repeat = RepeatMode.All };
+        queue.Start(tracks, tracks[1]);
+
+        Assert.Same(tracks[2], queue.PeekNext());
+        Assert.Same(tracks[1], queue.Current);
+        Assert.Same(queue.PeekNext(), queue.Next());
+        Assert.Same(tracks[0], queue.PeekNext()); // repeat all wraps to the top
+
+        queue.Repeat = RepeatMode.One;
+        Assert.Same(tracks[2], queue.PeekNext());
+
+        queue.Repeat = RepeatMode.Off;
+        Assert.Null(queue.PeekNext());
+    }
+
+    [Fact]
+    public void PeekNext_FollowsTheShuffledOrder_ButNotIntoTheNextPass()
+    {
+        var tracks = Library(("A", "One", 3), ("B", "Two", 3));
+        var queue = new PlayQueue { Repeat = RepeatMode.All };
+        queue.SetShuffle(true);
+        queue.Start(tracks, null);
+
+        for (var i = 1; i < tracks.Count; i++)
+        {
+            var peeked = queue.PeekNext();
+            Assert.Same(peeked, queue.Next());
+        }
+        Assert.Null(queue.PeekNext()); // the next pass is shuffled afresh when it starts
+    }
+
+    [Fact]
     public void InOrder_PlaysFromTheClickedTrack()
     {
         var tracks = Library(("A", "One", 3), ("B", "Two", 2));

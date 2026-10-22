@@ -1,5 +1,6 @@
 # Renders Melora's icon (a dark tile with three accent bars) to src/Melora/Assets/Melora.ico.
 # Each size is drawn separately and stored as PNG inside the .ico, so small sizes stay crisp.
+# Also writes a 512 px PNG, tools/Melora-512.png, for the app icon in Discord's developer portal.
 #   pwsh tools/make-icon.ps1
 Add-Type -AssemblyName System.Drawing
 
@@ -19,7 +20,7 @@ function RoundedRect([float]$x, [float]$y, [float]$w, [float]$h, [float]$r) {
     $p
 }
 
-$images = foreach ($s in $sizes) {
+function Render([int]$s) {
     $bmp = New-Object System.Drawing.Bitmap $s, $s
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
@@ -46,6 +47,8 @@ $images = foreach ($s in $sizes) {
     , @($s, $ms.ToArray())
 }
 
+$images = foreach ($s in $sizes) { , (Render $s) }
+
 # ICO container: header, one directory entry per size, then the PNG data.
 $fs = [System.IO.File]::Create($out)
 $w = New-Object System.IO.BinaryWriter $fs
@@ -62,3 +65,7 @@ foreach ($img in $images) {
 foreach ($img in $images) { $w.Write([byte[]]$img[1]) }
 $w.Dispose()
 "Wrote $out ($((Get-Item $out).Length) bytes)"
+
+$png = Join-Path $PSScriptRoot "Melora-512.png"
+[System.IO.File]::WriteAllBytes($png, (Render 512)[1])
+"Wrote $png"

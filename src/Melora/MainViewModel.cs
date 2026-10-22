@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Windows.Data;
 using System.Windows.Threading;
 using Melora.Audio;
+using Melora.Discord;
 using Melora.Library;
 using Melora.Playback;
 using Melora.Radio;
@@ -29,6 +30,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public TrackLibrary Music { get; }
     public TrackLibrary Mixes { get; }
     public Scrobbler Scrobbler { get; }
+    public DiscordPresence Discord { get; }
     public ObservableCollection<Station> Stations { get; } = [];
 
     public MainViewModel()
@@ -41,6 +43,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Music = new TrackLibrary(music, groupBy: nameof(Track.Group));
         Mixes = new TrackLibrary(mixes, groupBy: nameof(Track.Collection));
         Scrobbler = new Scrobbler(_db);
+        Discord = new DiscordPresence(_db);
 
         foreach (var library in new[] { Music, Mixes })
         {
@@ -93,6 +96,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         }
 
         _timer.Start();
+        Discord.Start();
         _ = Scrobbler.FlushAsync(); // anything left over from last time
         await RescanAsync();
     }
@@ -224,7 +228,76 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CurrentTrack));
         OnPropertyChanged(nameof(StreamTitle));
         OnPropertyChanged(nameof(PlayPauseLabel));
+        OnPropertyChanged(nameof(CanLove));
+        OnPropertyChanged(nameof(IsLoved));
         if (_currentStation is { } s) s.NowPlaying = _streamStatus ?? _streamTitle;
+        UpdatePresence();
+    }
+
+    // ---- Discord ----
+
+    DateTimeOffset _tunedInAt;
+
+    /// <summary>Tells Discord what's playing. Paused or stopped shows nothing, like other players do.</summary>
+    void UpdatePresence()
+    {
+        PresenceInfo? info = null;
+        if (_isPlaying && _currentTrack is { } t)
+        {
+            var start = DateTimeOffset.UtcNow - TimeSpan.FromSeconds(_engine.Position);
+            var end = start + TimeSpan.FromSeconds(_engine.Length);
+            info = t.Library == LibraryKind.Mixes
+                ? new PresenceInfo(PresenceSource.Mixes, t.Title, t.Artist, t.Collection, null, start, end)
+                : new PresenceInfo(PresenceSource.Music, t.Title, t.Artist, t.Album,
+                    t.Album is { } album ? new CoverQuery(t.AlbumArtist ?? t.Artist, album, null, t.Path) : null,
+                    start, end);
+        }
+        else if (_isPlaying && _currentStation is { } station)
+        {
+            var (artist, title) = StreamMetadata.SplitArtistTitle(_streamTitle);
+            info = new PresenceInfo(PresenceSource.Radio,
+                title ?? _streamTitle ?? station.Name,
+                artist ?? station.Name,
+                station.Name,
+                artist is not null && title is not null ? new CoverQuery(artist, null, title) : null,
+                _tunedInAt, null);
+        }
+        Discord.Show(info);
+    }
+
+    // ---- Love ----
+
+    bool _isLoved;
+
+    /// <summary>The playing track is loved.</summary>
+    public bool IsLoved => _currentTrack is not null && _isLoved;
+
+    /// <summary>A track is playing and there's a service to love it on.</summary>
+    public bool CanLove => _currentTrack is not null && Scrobbler.AnyConnected;
+
+    /// <summary>Loves the playing track, or un-loves it.</summary>
+    public async void ToggleLove()
+    {
+        if (!CanLove || _currentTrack is not { } track) return;
+        _isLoved = !_isLoved;
+        OnPropertyChanged(nameof(IsLoved));
+        await Scrobbler.SetLovedAsync(track, _isLoved);
+    }
+
+    /// <summary>Picks up a love made elsewhere (e.g. on the Last.fm website) for the track that just started.</summary>
+    async Task RefreshLovedAsync(Track track)
+    {
+        var loved = await Scrobbler.RefreshLovedAsync(track);
+        if (track != _currentTrack || loved == _isLoved) return;
+        _isLoved = loved;
+        OnPropertyChanged(nameof(IsLoved));
+    }
+
+    /// <summary>Settings closed: services may have been connected or disconnected.</summary>
+    public void SettingsChanged()
+    {
+        OnPropertyChanged(nameof(CanLove));
+        if (_currentTrack is { } track) _ = RefreshLovedAsync(track);
     }
 
     bool _isPlaying;
@@ -236,6 +309,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             if (!Set(ref _isPlaying, value)) return;
             OnPropertyChanged(nameof(PlayPauseLabel));
             OnPropertyChanged(nameof(IsPaused));
+            UpdatePresence();
         }
     }
 
@@ -287,6 +361,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             _queue.SetShuffle(value);
             OnPropertyChanged();
             _db.SetSetting("shuffle", value ? "1" : "0");
+            QueueNext();
         }
     }
 
@@ -313,6 +388,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         };
         _db.SetSetting("repeat", _queue.Repeat.ToString());
         OnRepeatChanged();
+        QueueNext();
     }
 
     void OnRepeatChanged()
@@ -389,6 +465,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         if (!CanSeek) return;
         _engine.Position = seconds;
         Position = seconds;
+        UpdatePresence();
     }
 
     void PlayTrack(Track? track)
@@ -400,20 +477,52 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             if (_engine.Play(track.Path))
             {
-                _currentTrack = track;
-                Length = _engine.Length;
-                Position = 0;
-                IsPlaying = true;
-                Scrobbler.TrackStarted(track, TimeSpan.FromSeconds(_engine.Length));
-                FormatText = DescribeFormat();
-                HighlightPlaying();
-                OnNowPlayingChanged();
+                TrackStarted(track);
                 return;
             }
             track = _queue.Next(manual: true);
         }
 
         StopAll();
+    }
+
+    /// <summary>Bookkeeping once a track is audible, whether it was started or followed on gaplessly.</summary>
+    void TrackStarted(Track track)
+    {
+        _currentTrack = track;
+        _isLoved = Scrobbler.IsLoved(track);
+        if (Scrobbler.AnyConnected) _ = RefreshLovedAsync(track);
+        Length = _engine.Length;
+        Position = _engine.Position;
+        IsPlaying = _engine.IsPlaying;
+        Scrobbler.TrackStarted(track, TimeSpan.FromSeconds(_engine.Length));
+        FormatText = DescribeFormat();
+        HighlightPlaying();
+        OnNowPlayingChanged();
+        QueueNext();
+    }
+
+    /// <summary>
+    /// Lines up the track that follows, so it starts without a gap. Music only: mixes are single
+    /// long files, and the gap between two different DJs' sets is welcome.
+    /// </summary>
+    void QueueNext()
+    {
+        if (_currentTrack is not { Library: LibraryKind.Music } || _engine.IsLive) return;
+        _engine.SetNext(_queue.PeekNext()?.Path);
+    }
+
+    /// <summary>Playback crossed into the queued track by itself.</summary>
+    void OnAdvanced()
+    {
+        var track = _queue.Next();
+        if (track is null || !string.Equals(track.Path, _engine.PlayingPath, StringComparison.OrdinalIgnoreCase))
+        {
+            // The queue changed in the last moment before the switch; go with the queue.
+            PlayTrack(track);
+            return;
+        }
+        TrackStarted(track);
     }
 
     /// <summary>Tunes in to a station. Connecting can take a few seconds; the UI shows it meanwhile.</summary>
@@ -445,6 +554,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _streamStatus = null;
         _listened = 0;
+        _tunedInAt = DateTimeOffset.UtcNow;
         IsPlaying = true;
         FormatText = DescribeFormat();
         UpdateStreamTitle();
@@ -557,6 +667,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (_engine.CheckAdvanced()) OnAdvanced();
         IsPlaying = _engine.IsPlaying;
         if (!IsSeeking && _engine.IsLoaded) Position = _engine.Position;
     }
@@ -602,6 +713,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _timer.Stop();
+        Discord.Dispose();
         Scrobbler.Dispose();
         Music.Service.Dispose();
         Mixes.Service.Dispose();

@@ -10,6 +10,9 @@ public sealed record Scrobble(
     TimeSpan Duration,
     DateTimeOffset StartedAt);
 
+/// <summary>Loving (or un-loving) a track. The MusicBrainz recording ID is from the file's tags, if it has one.</summary>
+public sealed record Love(string Artist, string Title, string? Album, string? RecordingMbid, bool Loved);
+
 public enum SubmitOutcome
 {
     /// <summary>Accepted (or deliberately ignored by the service); drop from the queue.</summary>
@@ -35,6 +38,9 @@ public interface IScrobbleService
     Task NowPlayingAsync(Scrobble play);
 
     Task<SubmitOutcome> SubmitAsync(IReadOnlyList<Scrobble> plays);
+
+    /// <summary>Marks a track as loved (or not) on the service.</summary>
+    Task<SubmitOutcome> LoveAsync(Love love);
 }
 
 /// <summary>The usual scrobbling rules shared by Last.fm and ListenBrainz.</summary>

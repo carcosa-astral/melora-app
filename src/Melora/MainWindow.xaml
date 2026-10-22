@@ -257,6 +257,26 @@
                            Foreground="{StaticResource TextDimBrush}" VerticalAlignment="Center" Margin="0,0,14,0" />
 
                 <StackPanel Grid.Column="3" Orientation="Horizontal">
+                    <Button Click="OnLove">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
+                                <Setter Property="Content" Value="&#xEB51;" />
+                                <Setter Property="ToolTip" Value="Love (Ctrl+L)" />
+                                <Setter Property="Foreground" Value="{StaticResource TextFaintBrush}" />
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding CanLove}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsLoved}" Value="True">
+                                        <Setter Property="Content" Value="&#xEB52;" />
+                                        <Setter Property="ToolTip" Value="Loved. Click to un-love (Ctrl+L)" />
+                                        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <ToggleButton IsChecked="{Binding Shuffle}" ToolTip="Shuffle">
                         <ToggleButton.Style>
                             <Style TargetType="ToggleButton" BasedOn="{StaticResource IconButton}">

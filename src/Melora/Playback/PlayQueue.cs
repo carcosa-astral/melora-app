@@ -60,6 +60,18 @@ public sealed class PlayQueue
         return Current;
     }
 
+    /// <summary>
+    /// What <see cref="Next"/> would play when this track ends by itself, without moving on. Null at
+    /// the end of a shuffled pass, whose next order isn't drawn until it's needed.
+    /// </summary>
+    public Track? PeekNext()
+    {
+        if (_order.Count == 0) return null;
+        if (Repeat == RepeatMode.One) return Current;
+        if (_index + 1 < _order.Count) return _order[_index + 1];
+        return Repeat == RepeatMode.All && !Shuffle ? _order[0] : null;
+    }
+
     public Track? Previous()
     {
         if (_order.Count == 0) return null;

@@ -5,6 +5,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-22
+
+Milestone 6: Discord, gapless and love.
+
+### Added
+- Gapless playback in Music: the next track starts on the very next sample, so live albums and
+  continuous mixes split into tracks play straight through. Tracks in a different sample rate or
+  channel layout from the one before still start right after it, with the usual short gap. Mixes
+  and radio are unchanged.
+- Love button (heart, or Ctrl+L) for the playing track, sent to Last.fm and ListenBrainz. Loves made
+  offline are kept and sent later, and a track loved on the Last.fm website shows as loved in Melora.
+  ListenBrainz needs to recognise the track: files tagged with Picard always work, others are matched
+  by artist and title.
+- Discord status: "Listening to Melora" on your profile with the title, artist, album, a progress bar
+  and the album cover. It needs a free application from Discord's developer portal (Settings explains
+  how), and mixes and radio can each be left out. Nothing shows while paused. Covers are looked up
+  online (Cover Art Archive for files tagged with Picard, then iTunes, then Deezer) because Discord can
+  only show pictures from the web; nothing is looked up while this is off.
+- `tools/make-icon.ps1` also writes a 512 px PNG of the icon, for the Discord application.
+
+### Fixed
+- Playback now follows Windows when the default output device changes (headphones plugged in or
+  unplugged, or another device picked) instead of staying on the old one.
+
 ### Changed
 - The portable build compresses its single-file exe: the folder is about 85 MB instead of 193 MB,
   with no noticeable change in startup time.

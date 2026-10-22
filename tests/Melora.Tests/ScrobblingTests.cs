@@ -128,6 +128,14 @@ public sealed class ScrobblerTests : IDisposable
         public Queue<SubmitOutcome> Outcomes { get; } = new();
         public List<Scrobble> NowPlaying { get; } = [];
         public List<List<Scrobble>> Batches { get; } = [];
+        public Queue<SubmitOutcome> LoveOutcomes { get; } = new();
+        public List<Love> Loves { get; } = [];
+
+        public Task<SubmitOutcome> LoveAsync(Love love)
+        {
+            Loves.Add(love);
+            return Task.FromResult(LoveOutcomes.Count > 0 ? LoveOutcomes.Dequeue() : SubmitOutcome.Sent);
+        }
 
         public Task NowPlayingAsync(Scrobble play)
         {
@@ -230,6 +238,51 @@ public sealed class ScrobblerTests : IDisposable
         await scrobbler.FlushAsync();
 
         Assert.Equal(0, db.CountScrobbles());
+    }
+
+    [Fact]
+    public async Task Love_IsSavedAndSent_AndKeptForLaterWhenOffline()
+    {
+        var db = new LibraryDb(_path);
+        var online = new FakeService("online");
+        var offline = new FakeService("offline");
+        offline.LoveOutcomes.Enqueue(SubmitOutcome.RetryLater);
+        var scrobbler = new Scrobbler(db, [online, offline]);
+        var track = MakeTrack("Song", 200);
+
+        await scrobbler.SetLovedAsync(track, true);
+
+        Assert.True(scrobbler.IsLoved(track));
+        Assert.Single(online.Loves);
+        Assert.True(online.Loves[0].Loved);
+        Assert.Empty(db.GetPendingLoves("online"));
+        Assert.Single(db.GetPendingLoves("offline"));
+
+        // Un-loved while still offline; once back, it's only told the latest.
+        offline.LoveOutcomes.Enqueue(SubmitOutcome.RetryLater);
+        await scrobbler.SetLovedAsync(track, false);
+        offline.Loves.Clear();
+        await scrobbler.FlushAsync();
+
+        Assert.False(scrobbler.IsLoved(track));
+        Assert.False(Assert.Single(offline.Loves).Loved);
+        Assert.Empty(db.GetPendingLoves("offline"));
+    }
+
+    [Fact]
+    public void SyncedLove_DoesNotOverrideOneWaitingToBeSent()
+    {
+        var db = new LibraryDb(_path);
+        db.SyncLoved("Artist", "Song", true);
+        Assert.True(db.GetLoved("artist", "SONG")); // case doesn't matter
+
+        db.SetLoved(new Love("Artist", "Song", null, null, false), ["lastfm"]);
+        db.SyncLoved("Artist", "Song", true); // Last.fm hasn't heard about the un-love yet
+        Assert.False(db.GetLoved("Artist", "Song"));
+
+        db.ClearPendingLove("lastfm", "Artist", "Song");
+        db.SyncLoved("Artist", "Song", true);
+        Assert.True(db.GetLoved("Artist", "Song"));
     }
 
     [Fact]

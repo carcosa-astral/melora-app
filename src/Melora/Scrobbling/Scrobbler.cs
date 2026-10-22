@@ -85,7 +85,8 @@ public sealed class Scrobbler : ObservableObject, IDisposable
         var n => $"{n:N0} plays are waiting to be sent.",
     };
 
-    bool AnyConnected => _services.Any(s => s.IsConnected);
+    /// <summary>At least one service is connected, so plays and loves have somewhere to go.</summary>
+    public bool AnyConnected => _services.Any(s => s.IsConnected);
 
     // ---- Playback events (UI thread) ----
 
@@ -125,6 +126,31 @@ public sealed class Scrobbler : ObservableObject, IDisposable
         _ = FlushAsync();
     }
 
+    // ---- Loving ----
+
+    /// <summary>Whether the track has been loved, as far as Melora knows.</summary>
+    public bool IsLoved(Track track) => _db.GetLoved(track.Artist, track.Title) == true;
+
+    /// <summary>Loves or un-loves a track: saved straight away, sent to every connected service (now, or once they can be reached).</summary>
+    public async Task SetLovedAsync(Track track, bool loved)
+    {
+        var mbid = await Task.Run(track.ReadRecordingMbid);
+        _db.SetLoved(new Love(track.Artist, track.Title, track.Album, mbid, loved),
+            _services.Where(s => s.IsConnected).Select(s => s.Id));
+        await FlushAsync();
+    }
+
+    /// <summary>
+    /// Asks Last.fm whether the track is loved there (it may have been loved on the website) and
+    /// remembers the answer. Returns what Melora now knows.
+    /// </summary>
+    public async Task<bool> RefreshLovedAsync(Track track)
+    {
+        if (LastFm is not null && await LastFm.GetLovedAsync(track.Artist, track.Title) is { } loved)
+            _db.SyncLoved(track.Artist, track.Title, loved);
+        return IsLoved(track);
+    }
+
     // ---- Sending ----
 
     /// <summary>Sends everything queued, oldest first, per service. Safe to call any time.</summary>
@@ -142,6 +168,13 @@ public sealed class Scrobbler : ObservableObject, IDisposable
                     _db.DeleteScrobbles(batch.Select(b => b.Id)); // sent, or refused for good
                     if (outcome == SubmitOutcome.Rejected)
                         Debug.WriteLine($"{service.Id} rejected {batch.Count} play(s)");
+                }
+
+                foreach (var love in _db.GetPendingLoves(service.Id))
+                {
+                    var outcome = await service.LoveAsync(love);
+                    if (outcome is SubmitOutcome.RetryLater or SubmitOutcome.AuthFailed) break;
+                    _db.ClearPendingLove(service.Id, love.Artist, love.Title); // sent, or refused for good
                 }
             }
         }
