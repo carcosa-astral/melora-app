@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   or the year tag. Mixes without either come last, A–Z.
 - On Discord, a mix shows the DJ's photo, found on Deezer by the DJ's folder name (Discord can't show
   the picture in the folder, as it only takes pictures from the web).
+- On Discord, a mix no longer repeats the DJ's name on a third line when the folder and artist match.
 - The icon for the Discord application is now 1024 px, as Discord asks (`tools/Melora-1024.png`).
 
 ## [0.6.0] - 2026-10-22
