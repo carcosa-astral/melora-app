@@ -147,6 +147,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set { if (Set(ref _minimizeToTray, value)) _db.SetSetting("minimizeToTray", value ? "1" : "0"); }
     }
 
+    /// <summary>Tint the accent colour from the playing album's art.</summary>
+    public bool AccentFromArt
+    {
+        get => _db.GetSetting("accentFromArt") != "0";
+        set
+        {
+            _db.SetSetting("accentFromArt", value ? "1" : "0");
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Small bits of window state the view keeps between runs (placement, column widths).</summary>
+    public string? GetViewSetting(string key) => _db.GetSetting("view." + key);
+
+    public void SetViewSetting(string key, string value) => _db.SetSetting("view." + key, value);
+
     /// <summary>Whether the "still running in the tray" hint has been shown once already.</summary>
     public bool TrayHintShown
     {

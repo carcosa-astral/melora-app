@@ -1,12 +1,15 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using DragCompletedEventArgs = System.Windows.Controls.Primitives.DragCompletedEventArgs;
+using DragDeltaEventArgs = System.Windows.Controls.Primitives.DragDeltaEventArgs;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using Melora.Interop;
 using Melora.Library;
 using Melora.Radio;
+using Melora.Theme;
 using Windows.Media;
 
 namespace Melora;
@@ -27,6 +30,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _vm;
+        RestoreLayout();
         Loaded += OnLoaded;
         _vm.PropertyChanged += OnViewModelChanged;
         _timelineTimer = new DispatcherTimer(TimelineInterval, DispatcherPriority.Background, (_, _) => UpdateTimeline(), Dispatcher);
@@ -67,6 +71,12 @@ public partial class MainWindow : Window
             MessageDialog.Inform(this, "Melora couldn't start", ex.Message);
             Close();
         }
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        SaveLayout();
+        base.OnClosing(e);
     }
 
     protected override void OnClosed(EventArgs e)
@@ -124,6 +134,11 @@ public partial class MainWindow : Window
                 if (_tray is not null)
                     _tray.Tooltip = _vm.CurrentTrack is null && _vm.CurrentStation is null ? "Melora" : _vm.NowPlaying;
                 UpdateOverlay();
+                UpdateAccent();
+                break;
+            case nameof(MainViewModel.AccentFromArt):
+                _accentAlbum = null;
+                UpdateAccent();
                 break;
             case nameof(MainViewModel.IsPlaying):
                 UpdateOverlayStatus();
@@ -131,6 +146,70 @@ public partial class MainWindow : Window
                 break;
         }
     }
+
+    // ---- Accent colour from album art ----
+
+    AlbumGroup? _accentAlbum;
+
+    async void UpdateAccent()
+    {
+        var album = _vm.AccentFromArt ? _vm.CurrentTrack?.Group : null;
+        if (album == _accentAlbum) return;
+        _accentAlbum = album;
+
+        var color = album is null ? null : await album.GetAccentAsync();
+        if (album != _accentAlbum) return; // the track changed while the art was being read
+        Accent.Apply(color ?? Accent.Default);
+    }
+
+    // ---- Window placement and column widths ----
+
+    void RestoreLayout()
+    {
+        ((ColumnLayout)FindResource("MusicColumns")).Load(_vm.GetViewSetting("columns.music"));
+        ((ColumnLayout)FindResource("MixColumns")).Load(_vm.GetViewSetting("columns.mixes"));
+
+        var screen = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+        if (WindowPlacement.Load(_vm.GetViewSetting("window")) is not { } placement || !placement.IsVisibleOn(screen)) return;
+
+        WindowStartupLocation = WindowStartupLocation.Manual;
+        Left = placement.Bounds.Left;
+        Top = placement.Bounds.Top;
+        Width = Math.Max(placement.Bounds.Width, MinWidth);
+        Height = Math.Max(placement.Bounds.Height, MinHeight);
+        if (placement.Maximized) WindowState = WindowState.Maximized;
+    }
+
+    void SaveLayout()
+    {
+        // RestoreBounds is the normal-size rectangle even while maximized or minimized.
+        var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, ActualWidth, ActualHeight) : RestoreBounds;
+        if (!bounds.IsEmpty)
+        {
+            var maximized = WindowState == WindowState.Maximized
+                            || (WindowState == WindowState.Minimized && _restoreState == WindowState.Maximized);
+            _vm.SetViewSetting("window", new WindowPlacement(bounds, maximized).Save());
+        }
+        SaveColumns();
+    }
+
+    void SaveColumns()
+    {
+        _vm.SetViewSetting("columns.music", ((ColumnLayout)FindResource("MusicColumns")).Save());
+        _vm.SetViewSetting("columns.mixes", ((ColumnLayout)FindResource("MixColumns")).Save());
+    }
+
+    /// <summary>A header divider was dragged. Its Tag says which layout and which divider ("MusicColumns|TitleArtist").</summary>
+    void OnColumnDrag(object sender, DragDeltaEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.Tag is not string tag || tag.Split('|') is not [var key, var divider]) return;
+        var layout = (ColumnLayout)FindResource(key);
+        if (divider == "TitleArtist") layout.DragTitleArtist(e.HorizontalChange);
+        else layout.DragArtistLength(e.HorizontalChange);
+    }
+
+    void OnColumnDragDone(object sender, DragCompletedEventArgs e) => SaveColumns();
 
     void UpdateOverlay()
     {

@@ -5,6 +5,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-21
+
+Milestone 5: polish.
+
+### Added
+- The accent colour (playing row, seek and volume bars, tab underline, toggles) fades to a colour picked
+  from the playing album's art, tuned to stay readable on the dark theme. Grey art, radio and nothing
+  playing use the usual periwinkle. Can be turned off in Settings.
+- Music and Mixes have a header row with draggable dividers to resize the Artist and Length columns.
+- Melora remembers the window's size, position and maximized state, and the column widths. A saved
+  position that's no longer on any screen (e.g. an unplugged monitor) is ignored.
+
 ## [0.4.0] - 2026-10-21
 
 Milestone 4: scrobbling.

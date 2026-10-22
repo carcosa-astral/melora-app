@@ -88,7 +88,7 @@
                     <ControlTemplate TargetType="RadioButton">
                         <StackPanel Background="Transparent">
                             <ContentPresenter Margin="0,8,0,6" />
-                            <Border x:Name="Underline" Height="2" CornerRadius="1" Background="{StaticResource AccentBrush}"
+                            <Border x:Name="Underline" Height="2" CornerRadius="1" Background="{DynamicResource AccentBrush}"
                                     Visibility="Hidden" />
                         </StackPanel>
                         <ControlTemplate.Triggers>
@@ -116,7 +116,7 @@
                     <ControlTemplate TargetType="RepeatButton">
                         <!-- Runs on to the thumb's centre (half its 12px width), so 100% fills to the end. -->
                         <Grid Background="Transparent">
-                            <Border Height="4" CornerRadius="2" Background="{StaticResource AccentBrush}" Margin="6,0,-6,0" />
+                            <Border Height="4" CornerRadius="2" Background="{DynamicResource AccentBrush}" Margin="6,0,-6,0" />
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -239,7 +239,7 @@
         <Style TargetType="TextBox">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
             <Setter Property="CaretBrush" Value="{StaticResource TextBrush}" />
-            <Setter Property="SelectionBrush" Value="{StaticResource AccentBrush}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Padding" Value="8,7" />
             <Setter Property="Template">
@@ -252,7 +252,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -263,7 +263,7 @@
         <Style TargetType="PasswordBox">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
             <Setter Property="CaretBrush" Value="{StaticResource TextBrush}" />
-            <Setter Property="SelectionBrush" Value="{StaticResource AccentBrush}" />
+            <Setter Property="SelectionBrush" Value="{DynamicResource AccentBrush}" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Padding" Value="8,7" />
             <Setter Property="Template">
@@ -276,7 +276,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -354,12 +354,12 @@
                         </StackPanel>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Box" Property="Background" Value="{StaticResource AccentBrush}" />
-                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                                 <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

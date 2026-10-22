@@ -51,6 +51,8 @@
 
                 <TextBlock Text="Window" Style="{StaticResource Heading}" />
                 <CheckBox Content="Minimizing sends Melora to the system tray" IsChecked="{Binding MinimizeToTray}" />
+                <CheckBox Content="Tint Melora with colours from the playing album's art" IsChecked="{Binding AccentFromArt}"
+                          Margin="0,10,0,0" />
 
                 <!-- ===== Scrobbling ===== -->
                 <TextBlock Text="Scrobbling" Style="{StaticResource Heading}" />
@@ -58,7 +60,7 @@
                            Text="A play counts once you've listened to half of it or 4 minutes, whichever comes first. Tracks under 30 seconds and radio are never sent. Plays made offline are kept and sent later." />
                 <CheckBox Content="Scrobble mixes too" IsChecked="{Binding Scrobbler.ScrobbleMixes}" Margin="0,12,0,0" />
                 <TextBlock Text="{Binding Scrobbler.PendingText}" Style="{StaticResource Hint}" Margin="0,8,0,0"
-                           Foreground="{StaticResource AccentBrush}" />
+                           Foreground="{DynamicResource AccentBrush}" />
 
                 <!-- Last.fm -->
                 <Border Style="{StaticResource Card}">
@@ -76,7 +78,7 @@
                             <TextBlock Style="{StaticResource Hint}" Margin="0,12,0,0">
                                 Last.fm needs your own API key. Create one for free at
                                 <Hyperlink NavigateUri="https://www.last.fm/api/account/create" RequestNavigate="OnLink"
-                                           Foreground="{StaticResource AccentBrush}">last.fm/api/account/create</Hyperlink>
+                                           Foreground="{DynamicResource AccentBrush}">last.fm/api/account/create</Hyperlink>
                                 (any application name will do), then paste the key and secret here.
                             </TextBlock>
                             <TextBlock Text="API key" Style="{StaticResource FieldLabel}" />
@@ -109,7 +111,7 @@
                             <TextBlock Style="{StaticResource Hint}" Margin="0,12,0,0">
                                 Copy your user token from
                                 <Hyperlink NavigateUri="https://listenbrainz.org/settings/" RequestNavigate="OnLink"
-                                           Foreground="{StaticResource AccentBrush}">listenbrainz.org/settings</Hyperlink>
+                                           Foreground="{DynamicResource AccentBrush}">listenbrainz.org/settings</Hyperlink>
                                 and paste it here.
                             </TextBlock>
                             <TextBlock Text="User token" Style="{StaticResource FieldLabel}" />

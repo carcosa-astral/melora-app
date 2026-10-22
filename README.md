@@ -24,7 +24,9 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | Media keys | Keyboard media keys and the Windows media overlay (volume flyout, lock screen) show the track, cover art and progress, and control playback |
 | Scrobbling | Last.fm and ListenBrainz, set up in Settings. Counts a play after half the track or 4 minutes of actual listening; radio and tracks under 30 s are skipped, mixes optional. Plays made offline are queued and sent later |
 | One instance | Launching Melora again brings the running copy back instead of starting a second one |
-| Look | Dark theme, Mica backdrop on Windows 11, IBM Plex Sans and Plex Mono (bundled, so no font install needed) |
+| Look | Dark theme, Mica backdrop on Windows 11, IBM Plex Sans and Plex Mono (bundled, so no font install needed). The accent colour fades to a colour from the playing album's art (can be turned off in Settings) |
+| Columns | Drag the dividers in the list headers to resize Artist and Length; Title takes the rest |
+| Remembers | Window size, position and maximized state, column widths, the open tab, volume, shuffle and repeat |
 | Portable | Everything lives next to `Melora.exe`; nothing is written to AppData or the registry |
 
 ### Keyboard
@@ -100,6 +102,7 @@ src/Melora/
 ├── Scrobbling/   Last.fm and ListenBrainz clients, scrobble rules, offline queue
 ├── Playback/     Play order: in-order, shuffle with artist and album spread, repeat
 ├── Interop/      Mica and dark title bar, tray icon, Windows media overlay
+├── Theme/        Accent colour picked from album art
 ├── Assets/Fonts/ IBM Plex (SIL Open Font License)
 └── *.xaml        Main window and settings
 tests/Melora.Tests/  Unit tests (xUnit)
@@ -113,7 +116,7 @@ lib/bass/         Native BASS libraries (x64)
 2. ~~**Mixes + Radio**: the Mixes library, and radio stations with a naming step and live stream titles~~
 3. ~~**Desktop integration**: tray icon, minimize/close to tray, media keys, Windows media overlay~~
 4. ~~**Scrobbling**: Last.fm and ListenBrainz, with an offline queue (Music and Mixes only)~~
-5. **Polish**: accent color from album art, resizable columns, remembered window and column state
+5. ~~**Polish**: accent color from album art, resizable columns, remembered window and column state~~
 
 See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 

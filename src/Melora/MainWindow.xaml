@@ -15,6 +15,42 @@
         PreviewKeyDown="OnPreviewKeyDown">
 
     <Window.Resources>
+        <!-- Column widths shared by each list's header and rows; saved between runs. -->
+        <local:ColumnLayout x:Key="MusicColumns" />
+        <local:ColumnLayout x:Key="MixColumns" Length="80" />
+
+        <Style x:Key="ColumnHeader" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Foreground" Value="{StaticResource TextFaintBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        </Style>
+
+        <!-- A draggable divider straddling the left edge of a header column. -->
+        <Style x:Key="ColumnDivider" TargetType="Thumb">
+            <Setter Property="Width" Value="9" />
+            <Setter Property="Margin" Value="-5,0,0,0" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="Cursor" Value="SizeWE" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="Transparent">
+                            <Border x:Name="Line" Width="1" Margin="0,3" Background="{StaticResource DividerBrush}"
+                                    HorizontalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Line" Property="Background" Value="{StaticResource TextDimBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="Line" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <!-- Shared row chrome for all three lists. -->
         <Style x:Key="RowItem" TargetType="ListViewItem">
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -90,8 +126,8 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="34" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="0.6*" />
-                    <ColumnDefinition Width="64" />
+                    <ColumnDefinition Width="{Binding ArtistWidth, Source={StaticResource MusicColumns}}" />
+                    <ColumnDefinition Width="{Binding LengthWidth, Source={StaticResource MusicColumns}}" />
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="No" Text="{Binding TrackNoText}" FontFamily="{StaticResource MonoFont}" FontSize="12"
                            Foreground="{StaticResource TextFaintBrush}" VerticalAlignment="Center" />
@@ -107,8 +143,8 @@
                     <Setter TargetName="No" Property="Text" Value="&#xE768;" />
                     <Setter TargetName="No" Property="FontFamily" Value="{StaticResource IconFont}" />
                     <Setter TargetName="No" Property="FontSize" Value="10" />
-                    <Setter TargetName="No" Property="Foreground" Value="{StaticResource AccentBrush}" />
-                    <Setter TargetName="TitleText" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                    <Setter TargetName="No" Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                    <Setter TargetName="TitleText" Property="Foreground" Value="{DynamicResource AccentBrush}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -119,8 +155,8 @@
             <Grid Margin="56,0,0,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="0.5*" />
-                    <ColumnDefinition Width="80" />
+                    <ColumnDefinition Width="{Binding ArtistWidth, Source={StaticResource MixColumns}}" />
+                    <ColumnDefinition Width="{Binding LengthWidth, Source={StaticResource MixColumns}}" />
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="TitleText" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
                            Margin="0,0,16,0" VerticalAlignment="Center" />
@@ -131,7 +167,7 @@
             </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                    <Setter TargetName="TitleText" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                    <Setter TargetName="TitleText" Property="Foreground" Value="{DynamicResource AccentBrush}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -157,8 +193,8 @@
             </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding IsPlaying}" Value="True">
-                    <Setter TargetName="NameText" Property="Foreground" Value="{StaticResource AccentBrush}" />
-                    <Setter TargetName="Glyph" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                    <Setter TargetName="NameText" Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                    <Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource AccentBrush}" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -228,7 +264,7 @@
                                 <Setter Property="Foreground" Value="{StaticResource TextFaintBrush}" />
                                 <Style.Triggers>
                                     <Trigger Property="IsChecked" Value="True">
-                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                     </Trigger>
                                 </Style.Triggers>
                             </Style>
@@ -240,7 +276,7 @@
                                 <Setter Property="Foreground" Value="{StaticResource TextFaintBrush}" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding RepeatActive}" Value="True">
-                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -286,7 +322,30 @@
 
         <!-- ===== Music ===== -->
         <Grid Grid.Row="2" Visibility="{Binding ShowMusic, Converter={StaticResource BoolToVisibility}}">
-            <ListView x:Name="MusicList" Style="{StaticResource ListBase}"
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Lined up with the rows: past the album art on the left, the scrollbar on the right. -->
+            <Grid Margin="216,10,36,0" Height="22">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="34" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="{Binding ArtistWidth, Source={StaticResource MusicColumns}}" />
+                    <ColumnDefinition Width="{Binding LengthWidth, Source={StaticResource MusicColumns}}" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="#" Style="{StaticResource ColumnHeader}" />
+                <TextBlock Grid.Column="1" Text="Title" Style="{StaticResource ColumnHeader}" Margin="0,0,16,0" />
+                <TextBlock Grid.Column="2" Text="Artist" Style="{StaticResource ColumnHeader}" Margin="0,0,16,0" />
+                <TextBlock Grid.Column="3" Text="Length" Style="{StaticResource ColumnHeader}" HorizontalAlignment="Right" />
+                <Thumb Grid.Column="2" Style="{StaticResource ColumnDivider}" Tag="MusicColumns|TitleArtist"
+                       DragDelta="OnColumnDrag" DragCompleted="OnColumnDragDone" />
+                <Thumb Grid.Column="3" Style="{StaticResource ColumnDivider}" Tag="MusicColumns|ArtistLength"
+                       DragDelta="OnColumnDrag" DragCompleted="OnColumnDragDone" />
+            </Grid>
+
+            <ListView x:Name="MusicList" Grid.Row="1" Style="{StaticResource ListBase}"
                       ItemsSource="{Binding Music.View}"
                       ItemTemplate="{StaticResource TrackRow}"
                       ItemContainerStyle="{StaticResource TrackItem}"
@@ -334,7 +393,7 @@
                 </ListView.GroupStyle>
             </ListView>
 
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+            <StackPanel Grid.RowSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center"
                         Visibility="{Binding Music.IsEmpty, Converter={StaticResource BoolToVisibility}}">
                 <TextBlock Text="Your music library is empty" FontSize="16" HorizontalAlignment="Center" />
                 <TextBlock Text="Add a folder and Melora will keep it in sync." Foreground="{StaticResource TextDimBrush}"
@@ -346,7 +405,28 @@
 
         <!-- ===== Mixes ===== -->
         <Grid Grid.Row="2" Visibility="{Binding ShowMixes, Converter={StaticResource BoolToVisibility}}">
-            <ListView x:Name="MixesList" Style="{StaticResource ListBase}" Padding="12,0,12,0"
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Lined up with the mix titles, which are indented past the DJ picture. -->
+            <Grid Margin="76,10,32,0" Height="22">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="{Binding ArtistWidth, Source={StaticResource MixColumns}}" />
+                    <ColumnDefinition Width="{Binding LengthWidth, Source={StaticResource MixColumns}}" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Title" Style="{StaticResource ColumnHeader}" Margin="0,0,16,0" />
+                <TextBlock Grid.Column="1" Text="Artist" Style="{StaticResource ColumnHeader}" Margin="0,0,16,0" />
+                <TextBlock Grid.Column="2" Text="Length" Style="{StaticResource ColumnHeader}" HorizontalAlignment="Right" />
+                <Thumb Grid.Column="1" Style="{StaticResource ColumnDivider}" Tag="MixColumns|TitleArtist"
+                       DragDelta="OnColumnDrag" DragCompleted="OnColumnDragDone" />
+                <Thumb Grid.Column="2" Style="{StaticResource ColumnDivider}" Tag="MixColumns|ArtistLength"
+                       DragDelta="OnColumnDrag" DragCompleted="OnColumnDragDone" />
+            </Grid>
+
+            <ListView x:Name="MixesList" Grid.Row="1" Style="{StaticResource ListBase}" Padding="12,0,12,0"
                       ItemsSource="{Binding Mixes.View}"
                       ItemTemplate="{StaticResource MixRow}"
                       ItemContainerStyle="{StaticResource MixItem}"
@@ -392,7 +472,7 @@
                 </ListView.GroupStyle>
             </ListView>
 
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+            <StackPanel Grid.RowSpan="2" HorizontalAlignment="Center" VerticalAlignment="Center"
                         Visibility="{Binding Mixes.IsEmpty, Converter={StaticResource BoolToVisibility}}">
                 <TextBlock Text="No mixes yet" FontSize="16" HorizontalAlignment="Center" />
                 <TextBlock Text="Point Melora at the folder where you keep DJ sets and mixes."

@@ -60,6 +60,21 @@ public sealed class AlbumGroup : ObservableObject
         }
     }
 
+    Task<Color?>? _accent;
+
+    /// <summary>The accent colour picked from this album's art (null for none or grey art). Worked out once.</summary>
+    public Task<Color?> GetAccentAsync() => _accent ??= Task.Run(() =>
+    {
+        try
+        {
+            return ReadArtBytes() is { } bytes ? Theme.Accent.FromImage(bytes) : null;
+        }
+        catch
+        {
+            return (Color?)null;
+        }
+    });
+
     /// <summary>The raw cover image (folder image first, then embedded art), or null. Reads from disk.</summary>
     public byte[]? ReadArtBytes()
     {
