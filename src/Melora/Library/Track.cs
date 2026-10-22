@@ -8,6 +8,7 @@ public sealed class Track : ObservableObject
     public required string Title { get; init; }
     public required string Artist { get; init; }
     public required AlbumGroup Group { get; init; }
+    public LibraryKind Library { get; init; }
     public int TrackNo { get; init; }
     public int DiscNo { get; init; }
     public TimeSpan Duration { get; init; }

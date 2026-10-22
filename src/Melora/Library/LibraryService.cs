@@ -13,6 +13,7 @@ public sealed class LibraryService : IDisposable
 
     readonly LibraryDb _db;
     readonly LibraryKind _kind;
+    readonly Func<IReadOnlyList<string>> _otherFolders;
     readonly List<FileSystemWatcher> _watchers = [];
     readonly SemaphoreSlim _scanLock = new(1, 1);
     Timer? _debounce;
@@ -20,11 +21,15 @@ public sealed class LibraryService : IDisposable
     /// <summary>Raised (on a background thread) when a scan changed the library.</summary>
     public event Action? Changed;
 
-    public LibraryService(LibraryDb db, LibraryKind kind)
+    /// <param name="otherFolders">The other library's folders, so nested folders aren't scanned twice.</param>
+    public LibraryService(LibraryDb db, LibraryKind kind, Func<IReadOnlyList<string>> otherFolders)
     {
         _db = db;
         _kind = kind;
+        _otherFolders = otherFolders;
     }
+
+    public LibraryKind Kind => _kind;
 
     public List<string> Folders => _db.GetFolders(_kind);
 
@@ -32,7 +37,10 @@ public sealed class LibraryService : IDisposable
 
     public void RemoveFolder(string path) { _db.RemoveFolder(_kind, path); Rewatch(); }
 
-    /// <summary>Loads the library from the database, sorted by artist, year, album, disc and track.</summary>
+    /// <summary>
+    /// Loads the library from the database. Music is sorted by artist, year, album, disc and track;
+    /// Mixes by artist and title.
+    /// </summary>
     public List<Track> Load()
     {
         var groups = new Dictionary<string, AlbumGroup>(StringComparer.OrdinalIgnoreCase);
@@ -67,10 +75,19 @@ public sealed class LibraryService : IDisposable
                 Title = Clean(row.Title) ?? System.IO.Path.GetFileNameWithoutExtension(path),
                 Artist = artist,
                 Group = group,
+                Library = _kind,
                 TrackNo = row.TrackNo,
                 DiscNo = row.DiscNo,
                 Duration = TimeSpan.FromMilliseconds(row.DurationMs),
             });
+        }
+
+        if (_kind == LibraryKind.Mixes)
+        {
+            return tracks
+                .OrderBy(t => t.Artist, StringComparer.CurrentCultureIgnoreCase)
+                .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
         }
 
         return tracks
@@ -105,12 +122,14 @@ public sealed class LibraryService : IDisposable
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var upserts = new List<TrackRow>();
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+        var otherFolders = _otherFolders();
 
         foreach (var folder in Folders.Where(Directory.Exists))
         {
             foreach (var file in Directory.EnumerateFiles(folder, "*", options))
             {
                 if (!Extensions.Contains(System.IO.Path.GetExtension(file))) continue;
+                if (!Owns(file, folder, otherFolders)) continue;
 
                 var stored = AppPaths.ToStored(file);
                 if (!seen.Add(stored)) continue;
@@ -128,6 +147,16 @@ public sealed class LibraryService : IDisposable
         _db.SaveScan(_kind, upserts, removed);
         return true;
     }
+
+    /// <summary>
+    /// A file belongs to the library whose folder is the deepest one containing it,
+    /// so a Mixes folder inside the Music folder only shows up in Mixes.
+    /// </summary>
+    public static bool Owns(string file, string ownFolder, IEnumerable<string> otherFolders) =>
+        !otherFolders.Any(other => IsUnder(file, other) && other.Length > ownFolder.Length);
+
+    public static bool IsUnder(string path, string folder) =>
+        path.StartsWith(folder.TrimEnd('\\', '/') + "\\", StringComparison.OrdinalIgnoreCase);
 
     static TrackRow ReadTags(string file, string stored, long mtime)
     {

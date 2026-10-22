@@ -5,6 +5,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-21
+
+Milestone 2: Mixes and Radio.
+
+### Added
+- Mixes library: its own folders, a flat list with thumbnails, double-click to play, shuffle and repeat.
+- Radio library: paste a stream address (direct, `.pls` or `.m3u`), check it, and name it before saving.
+  The check suggests the station's own name, selected so you can type a better one.
+- Live "now playing" titles from ICY and Ogg stream metadata, shown in the station list, status bar and window title.
+- Edit (F2) and delete (Del) stations from the keyboard or the right-click menu.
+- Stream format in the status bar for radio (codec, sample rate, bitrate).
+- Empty states for each tab, with a button to add a folder or station.
+- Settings window now lists Music and Mixes folders; a folder can't be in both.
+- Melora remembers the last open tab.
+
+### Changed
+- Space stops a radio station instead of pausing it, and Next/Previous switch stations while listening to radio.
+- A mixes folder inside a music folder now only appears in Mixes.
+
 ## [0.1.0] - 2026-10-21
 
 Milestone 1: the core player.

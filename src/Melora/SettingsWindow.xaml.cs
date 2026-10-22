@@ -3,47 +3,24 @@ using System.Windows;
 using System.Windows.Data;
 using Melora.Interop;
 using Melora.Library;
-using Microsoft.Win32;
 
 namespace Melora;
 
 public partial class SettingsWindow : Window
 {
-    readonly LibraryService _music;
-
-    public SettingsWindow(LibraryService music)
+    public SettingsWindow(LibraryService music, LibraryService mixes)
     {
         InitializeComponent();
-        _music = music;
-        Refresh();
+        MusicSection.Bind(music, mixes, "Music folders",
+            "Melora watches these folders and picks up new or changed files on its own.");
+        MixesSection.Bind(mixes, music, "Mixes folders",
+            "Kept apart from your albums. A mixes folder inside a music folder only shows up here.");
     }
 
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
         WindowEffects.Apply(this);
-    }
-
-    void Refresh() => FolderList.ItemsSource = _music.Folders;
-
-    public static string[]? PickFolders(Window owner)
-    {
-        var dialog = new OpenFolderDialog { Title = "Add music folder", Multiselect = true };
-        return dialog.ShowDialog(owner) == true ? dialog.FolderNames : null;
-    }
-
-    void OnAdd(object sender, RoutedEventArgs e)
-    {
-        if (PickFolders(this) is not { } folders) return;
-        foreach (var folder in folders) _music.AddFolder(folder);
-        Refresh();
-    }
-
-    void OnRemove(object sender, RoutedEventArgs e)
-    {
-        if (FolderList.SelectedItem is not string folder) return;
-        _music.RemoveFolder(folder);
-        Refresh();
     }
 
     void OnDone(object sender, RoutedEventArgs e) => Close();
@@ -57,4 +34,16 @@ public sealed class NotNullConverter : IValueConverter
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
+}
+
+/// <summary>Binds a RadioButton to an enum value: <c>IsChecked="{Binding Tab, Converter=..., ConverterParameter=Music}"</c>.</summary>
+public sealed class EnumEqualsConverter : IValueConverter
+{
+    public static EnumEqualsConverter Instance { get; } = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value?.ToString() == parameter?.ToString();
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is true && parameter is string name ? Enum.Parse(typeof(LibraryTab), name) : Binding.DoNothing;
 }

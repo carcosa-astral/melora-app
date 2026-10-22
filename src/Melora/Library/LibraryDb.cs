@@ -38,6 +38,11 @@ public sealed class LibraryDb
                 duration_ms  INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS tracks_library ON tracks (library);
+            CREATE TABLE IF NOT EXISTS stations (
+                id   INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                url  TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS settings (
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
@@ -168,7 +173,9 @@ public sealed class LibraryDb
 
         using (var cmd = db.CreateCommand())
         {
-            cmd.CommandText = "DELETE FROM tracks WHERE path = $path";
+            // Scoped to this library: a file that moved to the other library must survive this delete.
+            cmd.CommandText = "DELETE FROM tracks WHERE path = $path AND library = $lib";
+            cmd.Parameters.AddWithValue("$lib", Key(library));
             var path = cmd.Parameters.Add("$path", SqliteType.Text);
             foreach (var p in removedPaths)
             {
@@ -178,6 +185,49 @@ public sealed class LibraryDb
         }
 
         tx.Commit();
+    }
+
+    // ---- Radio stations ----
+
+    public List<(long Id, string Name, string Url)> GetStations()
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT id, name, url FROM stations";
+        var result = new List<(long, string, string)>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) result.Add((r.GetInt64(0), r.GetString(1), r.GetString(2)));
+        return result;
+    }
+
+    public long AddStation(string name, string url)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "INSERT INTO stations (name, url) VALUES ($name, $url) RETURNING id";
+        cmd.Parameters.AddWithValue("$name", name);
+        cmd.Parameters.AddWithValue("$url", url);
+        return (long)cmd.ExecuteScalar()!;
+    }
+
+    public void UpdateStation(long id, string name, string url)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "UPDATE stations SET name = $name, url = $url WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.Parameters.AddWithValue("$name", name);
+        cmd.Parameters.AddWithValue("$url", url);
+        cmd.ExecuteNonQuery();
+    }
+
+    public void DeleteStation(long id)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "DELETE FROM stations WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        cmd.ExecuteNonQuery();
     }
 
     // ---- Settings ----
