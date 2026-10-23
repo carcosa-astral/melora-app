@@ -30,7 +30,8 @@ First stable release.
   decoded eight times too large), no longer keep the original image file in memory, and are let go
   once scrolled out of view. Scrolling through 1,300 mixes went from about 191 MB to 163 MB.
 - The library shows sooner at startup: the audio plugins load just after the window is drawn instead
-  of before, which matters most on a cold start (about 0.7 s).- Mixes are sorted by date within each DJ, oldest first: the date in the title, like "(2020-10-14)",
+  of before, which matters most on a cold start (about 0.7 s).
+- Mixes are sorted by date within each DJ, oldest first: the date in the title, like "(2020-10-14)",
   or the year tag. Mixes without either come last, A–Z.
 - On Discord, a mix shows the DJ's photo, found on Deezer by the DJ's folder name (Discord can't show
   the picture in the folder, as it only takes pictures from the web).
