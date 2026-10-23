@@ -19,9 +19,9 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | Output | Follows Windows' default output device, e.g. when headphones are plugged in |
 | Shuffle | Every track plays once before any repeats, and the same artist or album never plays back-to-back |
 | Repeat | Off, all, one |
-| Library | Watched folders, rescanned automatically when files change |
+| Library | Watched folders, rescanned automatically when files change. Albums with several discs get a heading per disc (from the disc tag, or `CD1`/`Disc 2` folders), and compilations without an album artist stay together as "Various Artists" |
 | Mixes | Their own folders, grouped A–Z by DJ: the folder each mix sits in (`Mixes\DJ Name\...`), then by date, oldest first (a date in the title like "(2020-10-14)", or the year tag). Double-click to play; shuffle works here too. A mixes folder inside a music folder only shows up in Mixes |
-| Radio | Paste an address (direct stream, `.pls` or `.m3u`), check it, name it, save. Shows what the station is playing live, with the song's cover (looked up on iTunes and Deezer; can be turned off). MP3, AAC, Ogg Vorbis and Opus streams |
+| Radio | Paste an address (direct stream, `.pls`, `.m3u` or HLS `.m3u8`), check it, name it, save. Shows what the station is playing live, with the song's cover (looked up on iTunes and Deezer; can be turned off). MP3, AAC, Ogg Vorbis and Opus streams |
 | Tray | Minimizing sends Melora to the system tray (can be turned off in Settings); closing the window quits. Left-click the icon to show or hide Melora; right-click for play/pause, next, previous and Quit. The tooltip shows what's playing |
 | Media keys | Keyboard media keys and the Windows media overlay (volume flyout, lock screen) show the track, cover art and progress, and control playback |
 | Scrobbling | Last.fm and ListenBrainz, set up in Settings. Counts a play after half the track or 4 minutes of actual listening; radio and tracks under 30 s are skipped, mixes optional. Plays made offline are queued and sent later |
@@ -82,7 +82,7 @@ Melora writes only to a `data` folder beside the exe:
 ```
 Melora\
 ├── Melora.exe
-├── bass.dll, bassflac.dll, bassopus.dll, bass_aac.dll
+├── bass.dll, bassflac.dll, bassopus.dll, bass_aac.dll, basshls.dll
 └── data\
     ├── melora.db      libraries, folders, stations, settings, scrobble and love queues,
     │                  cover addresses and scrobbling keys/tokens (SQLite, plain text,
@@ -169,6 +169,7 @@ lib/bass/         Native BASS libraries (x64)
 6. ~~**Discord, gapless and love**: Discord status with album covers, gapless Music, love button, follow the output device~~
 7. ~~**1.0**: radio covers, lighter pictures, diagnostics log~~
 8. **1.1, shipping**: build and test on GitHub, one-command releases, a "new version" notice in Settings
+9. **1.2**: HLS radio streams (like the BBC's), disc headings and compilation albums
 
 See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 
@@ -179,7 +180,6 @@ Not scheduled; picked from as releases come up.
 - **Missing album covers found online**, for albums with no art (saved in `data`, never written into the music files)
 - **DJ pictures from Deezer** in Melora itself, for DJ folders without a picture
 - **More file types**: M4A/ALAC, WAV, Ogg Vorbis, if they're ever needed
-- **Multi-disc and compilation albums**: disc headings, "Various Artists" albums kept together
 - **Exclusive output**: bit-for-bit playback, bypassing Windows' mixer
 - **Gapless across sample rates**, for albums that mix 44.1 and 48 kHz
 - **Station logos** while no song cover is found

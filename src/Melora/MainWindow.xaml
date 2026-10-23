@@ -420,6 +420,29 @@
                             </Style>
                         </GroupStyle.ContainerStyle>
                     </GroupStyle>
+                    <!-- Inside an album: a "Disc 2" heading for albums with more than one disc, nothing otherwise. -->
+                    <GroupStyle>
+                        <GroupStyle.ContainerStyle>
+                            <Style TargetType="GroupItem">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="GroupItem">
+                                            <StackPanel>
+                                                <TextBlock x:Name="DiscHeading" Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                                                           Foreground="{StaticResource TextDimBrush}" Margin="8,10,0,4" />
+                                                <ItemsPresenter />
+                                            </StackPanel>
+                                            <ControlTemplate.Triggers>
+                                                <DataTrigger Binding="{Binding Name}" Value="">
+                                                    <Setter TargetName="DiscHeading" Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </GroupStyle.ContainerStyle>
+                    </GroupStyle>
                 </ListView.GroupStyle>
             </ListView>
 

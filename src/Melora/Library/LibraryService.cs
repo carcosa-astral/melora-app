@@ -45,49 +45,62 @@ public sealed partial class LibraryService : IDisposable
     /// </summary>
     public List<Track> Load()
     {
-        var groups = new Dictionary<string, AlbumGroup>(StringComparer.OrdinalIgnoreCase);
-        var tracks = new List<Track>();
         var roots = _kind == LibraryKind.Mixes ? Folders : [];
 
-        foreach (var row in _db.GetTracks(_kind))
+        // First work out which album each file belongs to, then make the albums: an album's artist
+        // ("Various Artists" or not) depends on all of its tracks.
+        var files = _db.GetTracks(_kind).Select(row =>
         {
             var path = AppPaths.FromStored(row.StoredPath);
-            var artist = Clean(row.Artist) ?? "Unknown Artist";
-            var albumArtist = Clean(row.AlbumArtist) ?? artist;
+            var folder = System.IO.Path.GetDirectoryName(path) ?? "";
+            // CD1\, Disc 2\ and the like are part of the album in the folder above.
+            var discFromFolder = DiscFolderNumber(System.IO.Path.GetFileName(folder));
+            var albumFolder = discFromFolder > 0 ? System.IO.Path.GetDirectoryName(folder) ?? folder : folder;
             var album = Clean(row.Album);
-            // Untagged files are grouped by folder so they don't all merge into one "album".
-            var key = album is null
-                ? "folder|" + System.IO.Path.GetDirectoryName(path)
-                : albumArtist + "|" + album;
+            var albumArtist = Clean(row.AlbumArtist);
 
-            if (!groups.TryGetValue(key, out var group))
-            {
-                group = new AlbumGroup
-                {
-                    Title = album ?? System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path)) ?? "Unknown Album",
-                    Artist = albumArtist,
-                    Year = row.Year,
-                    SampleTrackPath = path,
-                    ArtSize = _kind == LibraryKind.Mixes ? AlbumGroup.DjArtSize : AlbumGroup.AlbumArtSize,
-                };
-                groups[key] = group;
-            }
+            // Tagged album artist: that artist's album, wherever its files are. Otherwise the album
+            // in its folder, so a compilation without an album artist stays together. Files with
+            // no album tag are grouped by folder so they don't all merge into one "album".
+            var key = albumArtist is not null && album is not null ? $"artist|{albumArtist}|{album}"
+                : album is not null ? $"folder|{albumFolder}|{album}"
+                : $"folder|{folder}";
+            var disc = row.DiscNo > 0 ? row.DiscNo : discFromFolder;
+            return (Row: row, Path: path, Folder: folder, Album: album, AlbumArtist: albumArtist, Key: key, Disc: disc);
+        }).ToList();
 
-            tracks.Add(new Track
+        var groups = new Dictionary<string, AlbumGroup>(StringComparer.OrdinalIgnoreCase);
+        var discLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // albums with more than one disc
+        foreach (var album in files.GroupBy(f => f.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var first = album.First();
+            var artists = album.Select(f => Clean(f.Row.Artist) ?? "Unknown Artist").Distinct(StringComparer.CurrentCultureIgnoreCase).ToList();
+            groups[album.Key] = new AlbumGroup
             {
-                Path = path,
-                Title = Clean(row.Title) ?? System.IO.Path.GetFileNameWithoutExtension(path),
-                Artist = artist,
-                Group = group,
-                Album = album,
-                AlbumArtist = Clean(row.AlbumArtist),
-                Library = _kind,
-                Collection = _kind == LibraryKind.Mixes ? CollectionFor(path, roots) : "",
-                TrackNo = row.TrackNo,
-                DiscNo = row.DiscNo,
-                Duration = TimeSpan.FromMilliseconds(row.DurationMs),
-            });
+                Title = first.Album ?? System.IO.Path.GetFileName(first.Folder) ?? "Unknown Album",
+                Artist = first.AlbumArtist ?? (artists.Count == 1 ? artists[0] : VariousArtists),
+                Year = album.Select(f => f.Row.Year).FirstOrDefault(y => y > 0),
+                SampleTrackPath = first.Path,
+                ArtSize = _kind == LibraryKind.Mixes ? AlbumGroup.DjArtSize : AlbumGroup.AlbumArtSize,
+            };
+            if (album.Select(f => f.Disc).Where(d => d > 0).Distinct().Count() > 1) discLabels.Add(album.Key);
         }
+
+        var tracks = files.Select(f => new Track
+        {
+            Path = f.Path,
+            Title = Clean(f.Row.Title) ?? System.IO.Path.GetFileNameWithoutExtension(f.Path),
+            Artist = Clean(f.Row.Artist) ?? "Unknown Artist",
+            Group = groups[f.Key],
+            Album = f.Album,
+            AlbumArtist = f.AlbumArtist,
+            Library = _kind,
+            Collection = _kind == LibraryKind.Mixes ? CollectionFor(f.Path, roots) : "",
+            TrackNo = f.Row.TrackNo,
+            DiscNo = f.Disc,
+            Disc = discLabels.Contains(f.Key) && f.Disc > 0 ? $"Disc {f.Disc}" : "",
+            Duration = TimeSpan.FromMilliseconds(f.Row.DurationMs),
+        }).ToList();
 
         if (_kind == LibraryKind.Mixes)
         {
@@ -109,6 +122,19 @@ public sealed partial class LibraryService : IDisposable
     }
 
     static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    /// <summary>What an album is listed under when it has no album artist and its tracks have several artists.</summary>
+    public const string VariousArtists = "Various Artists";
+
+    /// <summary>The disc number of a folder named like "CD1", "CD 2", "Disc 3" or "Disk04"; 0 for any other name.</summary>
+    public static int DiscFolderNumber(string? name)
+    {
+        var match = name is null ? Match.Empty : DiscFolder().Match(name);
+        return match.Success ? int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture) : 0;
+    }
+
+    [GeneratedRegex(@"^(?:cd|disc|disk)[\s._-]*(\d{1,2})$", RegexOptions.IgnoreCase)]
+    private static partial Regex DiscFolder();
 
     /// <summary>
     /// When a mix was played: a date in its title like "(2020-10-14)" (also with dots or slashes),

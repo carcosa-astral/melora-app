@@ -125,12 +125,18 @@ public sealed class AlbumGroup : ObservableObject
     {
         var dir = System.IO.Path.GetDirectoryName(SampleTrackPath);
         if (dir is null) return null;
-        foreach (var name in CoverNames)
-            foreach (var ext in CoverExtensions)
-            {
-                var candidate = System.IO.Path.Combine(dir, name + ext);
-                if (File.Exists(candidate)) return File.ReadAllBytes(candidate);
-            }
+
+        // For a track in CD1\ and the like, the album's cover is often in the folder above.
+        var dirs = LibraryService.DiscFolderNumber(System.IO.Path.GetFileName(dir)) > 0 && System.IO.Path.GetDirectoryName(dir) is { } parent
+            ? new[] { dir, parent }
+            : [dir];
+        foreach (var folder in dirs)
+            foreach (var name in CoverNames)
+                foreach (var ext in CoverExtensions)
+                {
+                    var candidate = System.IO.Path.Combine(folder, name + ext);
+                    if (File.Exists(candidate)) return File.ReadAllBytes(candidate);
+                }
         return null;
     }
 

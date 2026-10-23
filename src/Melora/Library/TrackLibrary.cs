@@ -5,10 +5,10 @@ namespace Melora.Library;
 /// <summary>A file-based library (Music or Mixes) as the UI sees it: its tracks, view and totals.</summary>
 public sealed class TrackLibrary : ObservableObject
 {
-    readonly string _groupBy;
+    readonly string[] _groupBy;
 
-    /// <param name="groupBy">The Track property the list is grouped by (album for Music, DJ for Mixes).</param>
-    public TrackLibrary(LibraryService service, string groupBy)
+    /// <param name="groupBy">The Track properties the list is grouped by, outermost first (album then disc for Music, DJ for Mixes).</param>
+    public TrackLibrary(LibraryService service, params string[] groupBy)
     {
         Service = service;
         _groupBy = groupBy;
@@ -38,7 +38,7 @@ public sealed class TrackLibrary : ObservableObject
     {
         Tracks = Service.Load();
         var view = new ListCollectionView(Tracks);
-        view.GroupDescriptions.Add(new PropertyGroupDescription(_groupBy));
+        foreach (var property in _groupBy) view.GroupDescriptions.Add(new PropertyGroupDescription(property));
         View = view;
 
         var total = TimeSpan.FromTicks(Tracks.Sum(t => t.Duration.Ticks));

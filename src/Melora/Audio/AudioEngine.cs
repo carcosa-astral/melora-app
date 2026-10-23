@@ -19,8 +19,8 @@ public enum StreamResult { Ok, Failed, Superseded }
 public sealed class AudioEngine : IDisposable
 {
     // bass_aac decodes AAC itself; without it BASS falls back to Media Foundation,
-    // which takes ~50 s to start an AAC radio stream.
-    static readonly string[] Plugins = ["bassflac.dll", "bassopus.dll", "bass_aac.dll"];
+    // which takes ~50 s to start an AAC radio stream. basshls plays HLS (.m3u8) radio.
+    static readonly string[] Plugins = ["bassflac.dll", "bassopus.dll", "bass_aac.dll", "basshls.dll"];
 
     // BASS_CONFIG_DEV_DEFAULT, which ManagedBass 3.1 has no name for: follow Windows when the
     // default output device changes (headphones plugged in, a different device picked).

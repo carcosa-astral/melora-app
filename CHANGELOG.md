@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- HLS radio streams (`.m3u8` addresses), such as the BBC's, through the BASSHLS add-on, which now ships
+  with Melora. DASH (`.mpd`) isn't supported; stations that offer it usually offer HLS too. HLS streams
+  generally don't send song titles, so they show the station name.
+- Albums with more than one disc show a "Disc 1", "Disc 2" heading before each disc's tracks, using the
+  disc tag or, without one, folders named like `CD1` or `Disc 2`. Such folders count as one album, and
+  the album's cover is also looked for in the folder above them.
+- Compilations without an album-artist tag stay together as one album (the album name in its folder)
+  and are listed under "Various Artists", instead of splitting into one album per artist.
 - Settings has an About section with Melora's version. Once a day it checks GitHub for a newer release and
   links to it; nothing is downloaded or installed, and the check can be turned off.
 - Every push to GitHub is built and tested (GitHub Actions).

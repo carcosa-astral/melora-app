@@ -18,6 +18,9 @@ public sealed class Track : ObservableObject
     public string Collection { get; init; } = "";
     public int TrackNo { get; init; }
     public int DiscNo { get; init; }
+
+    /// <summary>"Disc 2" for a track on an album with more than one disc; empty otherwise. Music is sub-grouped by it.</summary>
+    public string Disc { get; init; } = "";
     public TimeSpan Duration { get; init; }
 
     public string Codec => System.IO.Path.GetExtension(Path).TrimStart('.').ToUpperInvariant();

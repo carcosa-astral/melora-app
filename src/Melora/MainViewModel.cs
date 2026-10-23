@@ -42,8 +42,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         LibraryService mixes = null!;
         var music = new LibraryService(_db, LibraryKind.Music, () => mixes.Folders);
         mixes = new LibraryService(_db, LibraryKind.Mixes, () => music.Folders);
-        Music = new TrackLibrary(music, groupBy: nameof(Track.Group));
-        Mixes = new TrackLibrary(mixes, groupBy: nameof(Track.Collection));
+        Music = new TrackLibrary(music, nameof(Track.Group), nameof(Track.Disc));
+        Mixes = new TrackLibrary(mixes, nameof(Track.Collection));
         Scrobbler = new Scrobbler(_db);
         Covers = CoverLookup.Create(_db);
         Updates = new UpdateCheck(_db);

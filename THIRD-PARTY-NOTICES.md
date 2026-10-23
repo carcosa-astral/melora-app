@@ -4,7 +4,7 @@ Melora uses the following components.
 
 | Component | Use | License |
 |---|---|---|
-| [BASS](https://www.un4seen.com/), BASSFLAC, BASSOPUS, BASS_AAC | Audio decoding and output | Free for non-commercial use; commercial use requires a license from Un4seen Developments |
+| [BASS](https://www.un4seen.com/), BASSFLAC, BASSOPUS, BASS_AAC, BASSHLS | Audio decoding and output | Free for non-commercial use; commercial use requires a license from Un4seen Developments |
 | [ManagedBass](https://github.com/ManagedBass/ManagedBass) | .NET bindings for BASS | MIT |
 | [TagLib#](https://github.com/mono/taglib-sharp) | Reading tags and embedded cover art | LGPL-2.1 |
 | [Microsoft.Data.Sqlite](https://github.com/dotnet/efcore) | Library database | MIT |
