@@ -154,6 +154,31 @@
                 </Border>
                 <TextBlock Style="{StaticResource Hint}" FontSize="12" Margin="0,12,0,0"
                            Text="Discord can only show pictures from the web, so album covers are looked up on the Cover Art Archive, iTunes and Deezer by artist and album name. Nothing is sent while this is off." />
+
+                <!-- ===== About ===== -->
+                <TextBlock Text="About" Style="{StaticResource Heading}" />
+                <TextBlock FontSize="14" FontWeight="SemiBold"
+                           Text="{Binding Source={x:Static local:UpdateCheck.CurrentVersion}, StringFormat='Melora {0}', Mode=OneTime}" />
+                <CheckBox Content="Check GitHub for new versions (once a day)" IsChecked="{Binding Updates.Enabled}" Margin="0,12,0,0" />
+                <DockPanel Margin="0,10,0,0">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource TextButton}" Content="Check now" Padding="10,4"
+                            IsEnabled="{Binding Updates.Enabled}" Click="OnCheckUpdates" />
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Style="{StaticResource Hint}" Text="{Binding Updates.Status}" />
+                        <!-- Only when there's something newer: a link to its release page. -->
+                        <TextBlock Style="{StaticResource Hint}" Margin="6,0,0,0"
+                                   Visibility="{Binding Updates.IsAvailable, Converter={StaticResource BoolToVisibility}}">
+                            <Hyperlink NavigateUri="{Binding Updates.ReleaseUrl}" RequestNavigate="OnLink"
+                                       Foreground="{DynamicResource AccentBrush}">Download</Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
+                </DockPanel>
+                <TextBlock Style="{StaticResource Hint}" FontSize="12" Margin="0,10,0,0">
+                    Melora never downloads or installs updates itself: replace <Run FontFamily="{StaticResource MonoFont}">Melora.exe</Run>
+                    with the new one and keep your <Run FontFamily="{StaticResource MonoFont}">data</Run> folder.
+                    <Hyperlink NavigateUri="https://github.com/carcosa-astral/melora-app/releases" RequestNavigate="OnLink"
+                               Foreground="{DynamicResource AccentBrush}">All releases</Hyperlink>
+                </TextBlock>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

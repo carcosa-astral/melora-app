@@ -27,6 +27,7 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | Scrobbling | Last.fm and ListenBrainz, set up in Settings. Counts a play after half the track or 4 minutes of actual listening; radio and tracks under 30 s are skipped, mixes optional. Plays made offline are queued and sent later |
 | Love | The heart in the transport bar (or Ctrl+L) loves the playing track on Last.fm and ListenBrainz. Loves made offline are sent later; tracks loved on the Last.fm website show as loved |
 | Discord | "Listening to Melora" on your Discord profile, with the track, a progress bar and the album cover. Mixes and radio can be left out; nothing shows while paused |
+| Updates | Settings shows the version and checks GitHub once a day for a newer one, with a link to it. Nothing is downloaded or installed; can be turned off |
 | One instance | Launching Melora again brings the running copy back instead of starting a second one |
 | Look | Dark theme, Mica backdrop on Windows 11, IBM Plex Sans and Plex Mono (bundled, so no font install needed). The accent colour fades to a colour from the playing album's art (can be turned off in Settings) |
 | Columns | Drag the dividers in the list headers to resize Artist and Length; Title takes the rest |
@@ -121,6 +122,22 @@ To trade disk space for memory and startup time, add `-p:EnableCompressionInSing
 The folder grows to about 250 MB, but Melora uses about 55 MB of memory instead of 140 MB and shows its
 window in about 0.65 s instead of 1 s.
 
+## Releasing
+
+```bash
+pwsh tools/release.ps1 -DryRun
+```
+
+```bash
+pwsh tools/release.ps1
+```
+
+The script releases the version in `Melora.csproj`, using its `CHANGELOG.md` entry as the notes. It checks
+that everything is committed and pushed and that the version is new, runs the tests, builds the portable
+folder, zips it without any `data` folder, tags the commit and publishes the GitHub release with the zip
+attached. `-DryRun` does everything except tagging and publishing, and shows the notes. It needs the
+[GitHub CLI](https://cli.github.com/), signed in.
+
 ## Project layout
 
 ```
@@ -137,6 +154,8 @@ src/Melora/
 └── *.xaml        Main window and settings
 tests/Melora.Tests/  Unit tests (xUnit)
 tools/make-icon.ps1  Renders Assets/Melora.ico and tools/Melora-1024.png
+tools/release.ps1    Tests, builds, zips and publishes a GitHub release
+.github/workflows/   Builds and tests every push
 lib/bass/         Native BASS libraries (x64)
 ```
 
@@ -148,8 +167,33 @@ lib/bass/         Native BASS libraries (x64)
 4. ~~**Scrobbling**: Last.fm and ListenBrainz, with an offline queue (Music and Mixes only)~~
 5. ~~**Polish**: accent color from album art, resizable columns, remembered window and column state~~
 6. ~~**Discord, gapless and love**: Discord status with album covers, gapless Music, love button, follow the output device~~
+7. ~~**1.0**: radio covers, lighter pictures, diagnostics log~~
+8. **1.1, shipping**: build and test on GitHub, one-command releases, a "new version" notice in Settings
 
 See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
+
+### Ideas for later
+
+Not scheduled; picked from as releases come up.
+
+- **Missing album covers found online**, for albums with no art (saved in `data`, never written into the music files)
+- **DJ pictures from Deezer** in Melora itself, for DJ folders without a picture
+- **More file types**: M4A/ALAC, WAV, Ogg Vorbis, if they're ever needed
+- **Multi-disc and compilation albums**: disc headings, "Various Artists" albums kept together
+- **Exclusive output**: bit-for-bit playback, bypassing Windows' mixer
+- **Gapless across sample rates**, for albums that mix 44.1 and 48 kHz
+- **Station logos** while no song cover is found
+- **Back up and restore stations** as a file
+- **Jump to now playing**: one click back to the playing track
+- **Type to jump**: typing in a list jumps to the first artist or DJ starting with those letters (not search)
+- **Signing the exe**, so SmartScreen doesn't warn on downloads (costs money; only matters if Melora is shared)
+- **Keyboard and screen-reader pass**: every control reachable and labelled
+
+### Not planned
+
+Playlists, a queue, search, an equalizer, ReplayGain, lyrics, discovery, visualizers, layout editing,
+a mini player, a sleep timer, cue sheets, resuming where you left off, taskbar controls, and an updater
+that downloads or installs anything.
 
 ## Third-party components
 

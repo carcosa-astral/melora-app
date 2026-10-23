@@ -172,6 +172,8 @@ public partial class SettingsWindow : Window
 
     static void OpenInBrowser(string url) => Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
 
+    async void OnCheckUpdates(object sender, RoutedEventArgs e) => await _vm.Updates.CheckAsync();
+
     void OnDone(object sender, RoutedEventArgs e) => Close();
 }
 

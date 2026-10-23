@@ -67,3 +67,24 @@ public sealed class DiagnosticsTests : IDisposable
         Assert.Contains("folder not found, keeping its tracks", File.ReadAllText(Log.FilePath));
     }
 }
+
+public class UpdateCheckTests
+{
+    [Theory]
+    [InlineData("v1.2.0", "1.2.0")]
+    [InlineData("1.2", "1.2.0")]
+    [InlineData("V2.0.1", "2.0.1")]
+    [InlineData("nightly", null)]
+    [InlineData(null, null)]
+    public void ParseTag(string? tag, string? expected) =>
+        Assert.Equal(expected, UpdateCheck.ParseTag(tag)?.ToString(3));
+
+    [Theory]
+    [InlineData("v1.1.0", "1.0.0", true)]
+    [InlineData("v1.0.0", "1.0.0", false)]
+    [InlineData("v0.9.0", "1.0.0", false)]   // running something newer than the latest release
+    [InlineData("v1.0.10", "1.0.9", true)]   // compared as numbers, not text
+    [InlineData(null, "1.0.0", false)]
+    public void IsNewer(string? latest, string current, bool expected) =>
+        Assert.Equal(expected, UpdateCheck.IsNewer(latest, current));
+}

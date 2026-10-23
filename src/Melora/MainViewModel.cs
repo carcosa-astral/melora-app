@@ -32,6 +32,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public Scrobbler Scrobbler { get; }
     public DiscordPresence Discord { get; }
     public CoverLookup Covers { get; }
+    public UpdateCheck Updates { get; }
     public ObservableCollection<Station> Stations { get; } = [];
 
     public MainViewModel()
@@ -45,6 +46,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Mixes = new TrackLibrary(mixes, groupBy: nameof(Track.Collection));
         Scrobbler = new Scrobbler(_db);
         Covers = CoverLookup.Create(_db);
+        Updates = new UpdateCheck(_db);
         Discord = new DiscordPresence(_db, Covers);
 
         foreach (var library in new[] { Music, Mixes })
@@ -109,6 +111,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _timer.Start();
         Discord.Start();
         _ = Scrobbler.FlushAsync(); // anything left over from last time
+        _ = Updates.CheckIfDueAsync();
         await RescanAsync();
     }
 

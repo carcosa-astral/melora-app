@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- Settings has an About section with Melora's version. Once a day it checks GitHub for a newer release and
+  links to it; nothing is downloaded or installed, and the check can be turned off.
+- Every push to GitHub is built and tested (GitHub Actions).
+- `tools/release.ps1` publishes a release in one go: checks, tests, builds, zips without the `data` folder,
+  tags, and creates the GitHub release with the changelog entry as its notes. `-DryRun` tries it safely.
+
 ## [1.0.0] - 2026-10-22
 
 First stable release.
