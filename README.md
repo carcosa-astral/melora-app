@@ -86,8 +86,9 @@ Melora\
     ├── melora.db      libraries, folders, stations, settings, scrobble and love queues,
     │                  cover addresses and scrobbling keys/tokens (SQLite, plain text,
     │                  so keep the folder private)
-    └── melora.log     problems worth knowing about: skipped files, refused scrobbles,
-                       stations that won't connect (kept under 1 MB)
+    ├── melora.log     problems worth knowing about: skipped files, refused scrobbles,
+    │                  stations that won't connect
+    └── melora-<date>_<time>.log   earlier logs (1 MB each); the newest five are kept
 ```
 
 Folders on the same drive as Melora are stored as relative paths, so a copy on a USB stick keeps working when its drive letter changes.
@@ -114,11 +115,11 @@ dotnet test
 dotnet publish src/Melora -p:PublishProfile=Portable
 ```
 
-This produces a self-contained folder in `dist\Melora\` (about 250 MB, with the .NET runtime included in `Melora.exe`). Copy that folder anywhere; no installer is needed.
+This produces a self-contained folder in `dist\Melora\` (about 85 MB, with the .NET runtime included and compressed into `Melora.exe`). Copy that folder anywhere; no installer is needed.
 
-The exe is deliberately not compressed and is compiled ahead of time (ReadyToRun). That makes it bigger,
-but Melora starts in about 0.65 s and uses about 55 MB of memory, against about 1 s and 140 MB compressed.
-The first launch of a new exe can take a while as Windows Defender scans it once.
+To trade disk space for memory and startup time, add `-p:EnableCompressionInSingleFile=false -p:PublishReadyToRun=true`.
+The folder grows to about 250 MB, but Melora uses about 55 MB of memory instead of 140 MB and shows its
+window in about 0.65 s instead of 1 s.
 
 ## Project layout
 

@@ -11,8 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   so covers are looked up on iTunes and Deezer by artist and song name; it can be turned off in Settings.
 - A log, `data\melora.log`, of things that go wrong without showing: files that were skipped because
   they're missing or can't be played, scrobbles and loves a service refused or couldn't receive yet,
-  a refused Discord application ID, stations that won't connect or drop, and unexpected errors. It's
-  kept under 1 MB (the previous one is kept as `melora.log.old`).
+  a refused Discord application ID, stations that won't connect or drop, and unexpected errors. At
+  1 MB it's renamed after the date and time (`melora-2026-10-22_195601.log`) and a new one started;
+  the newest five of those are kept.
 - Cover matching prefers an exact title, brackets included, so a remix gets the remix's cover when the
   store has it, and the original's otherwise.
 
@@ -25,11 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   decoded eight times too large), no longer keep the original image file in memory, and are let go
   once scrolled out of view. Scrolling through 1,300 mixes went from about 191 MB to 163 MB.
 - The library shows sooner at startup: the audio plugins load just after the window is drawn instead
-  of before, which matters most on a cold start (about 0.7 s).
-- The portable build is no longer compressed, and is compiled ahead of time (ReadyToRun). Memory
-  drops from about 140 MB to 55 MB and the window appears in about 0.65 s instead of 1 s; the folder
-  grows from about 85 MB to 250 MB. This reverses the compression below.
-- Mixes are sorted by date within each DJ, oldest first: the date in the title, like "(2020-10-14)",
+  of before, which matters most on a cold start (about 0.7 s).- Mixes are sorted by date within each DJ, oldest first: the date in the title, like "(2020-10-14)",
   or the year tag. Mixes without either come last, A–Z.
 - On Discord, a mix shows the DJ's photo, found on Deezer by the DJ's folder name (Discord can't show
   the picture in the folder, as it only takes pictures from the web).

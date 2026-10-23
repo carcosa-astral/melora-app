@@ -26,9 +26,26 @@ public sealed class DiagnosticsTests : IDisposable
         File.AppendAllText(Log.FilePath, new string('x', 1024 * 1024));
         Log.Write("after rollover");
 
-        Assert.Contains("first", File.ReadAllText(Log.FilePath + ".old"));
+        var rolled = Assert.Single(Directory.GetFiles(_dir, "melora-*.log"));
+        Assert.Matches(@"melora-\d{4}-\d{2}-\d{2}_\d{6}\.log$", rolled);
+        Assert.Contains("first", File.ReadAllText(rolled));
         Assert.DoesNotContain("first", File.ReadAllText(Log.FilePath));
         Assert.Contains("after rollover", File.ReadAllText(Log.FilePath));
+    }
+
+    [Fact]
+    public void Log_KeepsOnlyTheNewestFiveOldLogs()
+    {
+        for (var day = 1; day <= 7; day++)
+            File.WriteAllText(Path.Combine(_dir, $"melora-2020-01-0{day}_120000.log"), "old");
+        File.WriteAllText(Log.FilePath, new string('x', 1024 * 1024 + 1));
+
+        Log.Write("new");
+
+        var kept = Directory.GetFiles(_dir, "melora-*.log").Select(Path.GetFileName).ToList();
+        Assert.Equal(5, kept.Count);
+        foreach (var oldest in new[] { "01", "02", "03" })
+            Assert.DoesNotContain($"melora-2020-01-{oldest}_120000.log", kept);
     }
 
     [Fact]
