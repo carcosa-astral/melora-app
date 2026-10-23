@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-22
+
+First stable release.
+
 ### Added
 - Covers for songs on the radio: the station's row and the Windows media overlay show the cover of the
   song playing, and the accent colour follows it (with "Tint Melora…" on). Stations don't send pictures,
