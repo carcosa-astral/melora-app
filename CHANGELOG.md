@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-24
+
+Pictures and getting around.
+
 ### Added
 - Albums without a cover in their folder or files get one found online (Cover Art Archive for files
   tagged with Picard, then iTunes, then Deezer), and DJ folders without a picture get the DJ's photo

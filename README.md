@@ -174,7 +174,8 @@ lib/bass/         Native BASS libraries (x64)
 7. ~~**1.0**: radio covers, lighter pictures, diagnostics log~~
 8. ~~**1.2**: HLS radio streams (like the BBC's), disc headings and compilation albums, plus the planned 1.1
    (build and test on GitHub, one-command releases, a "new version" notice in Settings), released together~~
-9. **1.3, pictures and getting around**: missing album covers and DJ pictures found online, jump to now playing, type to jump
+9. ~~**1.3, pictures and getting around**: missing album covers and DJ pictures found online, jump to now playing, type to jump~~
+10. **Next**: not picked yet; see the ideas below
 
 See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 
