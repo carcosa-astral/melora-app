@@ -168,8 +168,9 @@ lib/bass/         Native BASS libraries (x64)
 5. ~~**Polish**: accent color from album art, resizable columns, remembered window and column state~~
 6. ~~**Discord, gapless and love**: Discord status with album covers, gapless Music, love button, follow the output device~~
 7. ~~**1.0**: radio covers, lighter pictures, diagnostics log~~
-8. **1.1, shipping**: build and test on GitHub, one-command releases, a "new version" notice in Settings
-9. **1.2**: HLS radio streams (like the BBC's), disc headings and compilation albums
+8. ~~**1.2**: HLS radio streams (like the BBC's), disc headings and compilation albums, plus the planned 1.1
+   (build and test on GitHub, one-command releases, a "new version" notice in Settings), released together~~
+9. **Next**: not picked yet; see the ideas below
 
 See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 
