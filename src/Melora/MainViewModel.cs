@@ -32,6 +32,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public Scrobbler Scrobbler { get; }
     public DiscordPresence Discord { get; }
     public CoverLookup Covers { get; }
+    public OnlineArt OnlineArt { get; }
     public UpdateCheck Updates { get; }
     public ObservableCollection<Station> Stations { get; } = [];
 
@@ -46,6 +47,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Mixes = new TrackLibrary(mixes, nameof(Track.Collection));
         Scrobbler = new Scrobbler(_db);
         Covers = CoverLookup.Create(_db);
+        OnlineArt = new OnlineArt(Covers, System.IO.Path.Combine(AppPaths.DataDir, "covers"))
+        {
+            Enabled = _db.GetSetting("onlineArt") != "0",
+        };
+        music.Online = mixes.Online = OnlineArt;
         Updates = new UpdateCheck(_db);
         Discord = new DiscordPresence(_db, Covers);
 
@@ -652,6 +658,24 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         _streamTitle = _engine.StreamTitle;
         OnNowPlayingChanged();
         UpdateRadioArt();
+    }
+
+    // ---- Pictures found online ----
+
+    /// <summary>Find covers for albums, and pictures for DJs, that have none (saved in data\covers).</summary>
+    public bool OnlineArtEnabled
+    {
+        get => OnlineArt.Enabled;
+        set
+        {
+            if (value == OnlineArt.Enabled) return;
+            OnlineArt.Enabled = value;
+            _db.SetSetting("onlineArt", value ? "1" : "0");
+            OnPropertyChanged();
+            // New album headings pick the change up (showing or dropping the found pictures).
+            Music.Reload();
+            Mixes.Reload();
+        }
     }
 
     // ---- Radio covers ----

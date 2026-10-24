@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
+using Melora.Discord;
 
 namespace Melora.Library;
 
@@ -19,6 +20,9 @@ public sealed partial class LibraryService : IDisposable
     readonly List<FileSystemWatcher> _watchers = [];
     readonly SemaphoreSlim _scanLock = new(1, 1);
     Timer? _debounce;
+
+    /// <summary>Where albums and DJs without a picture of their own get one; null for nowhere.</summary>
+    public OnlineArt? Online { get; set; }
 
     /// <summary>Raised (on a background thread) when a scan changed the library.</summary>
     public event Action? Changed;
@@ -74,14 +78,21 @@ public sealed partial class LibraryService : IDisposable
         foreach (var album in files.GroupBy(f => f.Key, StringComparer.OrdinalIgnoreCase))
         {
             var first = album.First();
-            var artists = album.Select(f => Clean(f.Row.Artist) ?? "Unknown Artist").Distinct(StringComparer.CurrentCultureIgnoreCase).ToList();
+            var artists = album.Select(f => Clean(f.Row.Artist) ?? UnknownArtist).Distinct(StringComparer.CurrentCultureIgnoreCase).ToList();
+            var artist = first.AlbumArtist ?? (artists.Count == 1 ? artists[0] : VariousArtists);
+            var collection = _kind == LibraryKind.Mixes ? CollectionFor(first.Path, roots) : "";
             groups[album.Key] = new AlbumGroup
             {
                 Title = first.Album ?? System.IO.Path.GetFileName(first.Folder) ?? "Unknown Album",
-                Artist = first.AlbumArtist ?? (artists.Count == 1 ? artists[0] : VariousArtists),
+                Artist = artist,
                 Year = album.Select(f => f.Row.Year).FirstOrDefault(y => y > 0),
                 SampleTrackPath = first.Path,
                 ArtSize = _kind == LibraryKind.Mixes ? AlbumGroup.DjArtSize : AlbumGroup.AlbumArtSize,
+                // Mixes headings show the DJ, so look up the DJ's photo; albums only when tagged as one.
+                OnlineQuery = _kind == LibraryKind.Mixes
+                    ? collection.Length > 0 ? new CoverQuery(collection, null, null) : null
+                    : first.Album is { } title && artist != UnknownArtist ? new CoverQuery(artist, title, null, first.Path) : null,
+                Online = Online,
             };
             if (album.Select(f => f.Disc).Where(d => d > 0).Distinct().Count() > 1) discLabels.Add(album.Key);
         }
@@ -90,7 +101,7 @@ public sealed partial class LibraryService : IDisposable
         {
             Path = f.Path,
             Title = Clean(f.Row.Title) ?? System.IO.Path.GetFileNameWithoutExtension(f.Path),
-            Artist = Clean(f.Row.Artist) ?? "Unknown Artist",
+            Artist = Clean(f.Row.Artist) ?? UnknownArtist,
             Group = groups[f.Key],
             Album = f.Album,
             AlbumArtist = f.AlbumArtist,
@@ -122,6 +133,8 @@ public sealed partial class LibraryService : IDisposable
     }
 
     static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    const string UnknownArtist = "Unknown Artist";
 
     /// <summary>What an album is listed under when it has no album artist and its tracks have several artists.</summary>
     public const string VariousArtists = "Various Artists";

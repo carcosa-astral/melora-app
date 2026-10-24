@@ -12,7 +12,7 @@
         FontFamily="{StaticResource UiFont}" FontSize="13"
         TextOptions.TextFormattingMode="Display"
         UseLayoutRounding="True"
-        PreviewKeyDown="OnPreviewKeyDown">
+        PreviewKeyDown="OnPreviewKeyDown" PreviewTextInput="OnPreviewTextInput">
 
     <Window.Resources>
         <!-- Column widths shared by each list's header and rows; saved between runs. -->
@@ -118,6 +118,8 @@
             <Setter Property="VirtualizingPanel.IsVirtualizingWhenGrouping" Value="True" />
             <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
             <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+            <!-- Typing jumps to an artist, DJ or station instead (see ListJump). -->
+            <Setter Property="IsTextSearchEnabled" Value="False" />
         </Style>
 
         <!-- Music: one row per track inside its album group. -->
@@ -571,7 +573,8 @@
                            FontSize="12" Margin="16,0,0,0" />
                 <TextBlock DockPanel.Dock="Right" Text="{Binding FormatText}" FontFamily="{StaticResource MonoFont}"
                            FontSize="11.5" Foreground="{StaticResource TextDimBrush}" Margin="16,0,0,0" />
-                <TextBlock Text="{Binding NowPlaying}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding NowPlaying}" FontSize="12" TextTrimming="CharacterEllipsis"
+                           Cursor="Hand" ToolTip="Show in the list (Ctrl+J)" MouseLeftButtonUp="OnNowPlayingClick" />
             </DockPanel>
         </Border>
     </Grid>

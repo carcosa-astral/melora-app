@@ -41,7 +41,7 @@ public sealed class MediaOverlay
     }
 
     /// <summary>Shows what's playing. Art is read off the UI thread and added when it's ready.</summary>
-    public async void Show(string title, string artist, string? album, Func<byte[]?>? readArt)
+    public async void Show(string title, string artist, string? album, Func<Task<byte[]?>>? readArt)
     {
         var request = ++_artRequest;
         var updater = _smtc.DisplayUpdater;

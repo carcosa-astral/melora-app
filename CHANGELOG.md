@@ -5,6 +5,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- Albums without a cover in their folder or files get one found online (Cover Art Archive for files
+  tagged with Picard, then iTunes, then Deezer), and DJ folders without a picture get the DJ's photo
+  from Deezer. They're kept in `data\covers`, so each is looked up once; music files and folders are
+  never changed. "Find covers and DJ pictures that are missing" in Settings turns it off, which also
+  hides the ones already found.
+- Type to jump: typing the first letters of an artist (Music), DJ (Mixes) or station jumps to it,
+  with its heading at the top. The same letter again steps to the next name starting with it. It
+  isn't a search; nothing is hidden.
+- Jump to now playing: click what's playing in the status bar, or press Ctrl+J, to switch to its tab
+  and scroll to it.
+
 ## [1.2.0] - 2026-10-22
 
 Includes what was planned as 1.1, which wasn't released on its own.

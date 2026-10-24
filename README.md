@@ -20,6 +20,8 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | Shuffle | Every track plays once before any repeats, and the same artist or album never plays back-to-back |
 | Repeat | Off, all, one |
 | Library | Watched folders, rescanned automatically when files change. Albums with several discs get a heading per disc (from the disc tag, or `CD1`/`Disc 2` folders), and compilations without an album artist stay together as "Various Artists" |
+| Missing art | Albums and DJ folders without a picture of their own get one from the Cover Art Archive, iTunes or Deezer (DJ photos from Deezer). Kept in `data\covers`; your music files and folders are never changed. Can be turned off in Settings |
+| Getting around | Type the first letters of an artist, DJ or station to jump to it (not a search: nothing is hidden); the same letter again steps to the next one. Click what's playing in the status bar, or press Ctrl+J, to jump back to it |
 | Mixes | Their own folders, grouped A–Z by DJ: the folder each mix sits in (`Mixes\DJ Name\...`), then by date, oldest first (a date in the title like "(2020-10-14)", or the year tag). Double-click to play; shuffle works here too. A mixes folder inside a music folder only shows up in Mixes |
 | Radio | Paste an address (direct stream, `.pls`, `.m3u` or HLS `.m3u8`), check it, name it, save. Shows what the station is playing live, with the song's cover (looked up on iTunes and Deezer; can be turned off). MP3, AAC, Ogg Vorbis and Opus streams |
 | Tray | Minimizing sends Melora to the system tray (can be turned off in Settings); closing the window quits. Left-click the icon to show or hide Melora; right-click for play/pause, next, previous and Quit. The tooltip shows what's playing |
@@ -43,6 +45,8 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | `Ctrl` + `→` | Next track |
 | `Ctrl` + `←` | Previous track (restarts the track if more than 3 s in) |
 | `Ctrl` + `L` | Love or un-love the playing track |
+| `Ctrl` + `J` | Show the playing track or station in its list |
+| Letters | Jump to the artist (Music), DJ (Mixes) or station starting with them |
 | `Ctrl` + `Q` | Quit |
 | `F2` | Edit the selected station |
 | `Del` | Delete the selected station |
@@ -170,7 +174,7 @@ lib/bass/         Native BASS libraries (x64)
 7. ~~**1.0**: radio covers, lighter pictures, diagnostics log~~
 8. ~~**1.2**: HLS radio streams (like the BBC's), disc headings and compilation albums, plus the planned 1.1
    (build and test on GitHub, one-command releases, a "new version" notice in Settings), released together~~
-9. **Next**: not picked yet; see the ideas below
+9. **1.3, pictures and getting around**: missing album covers and DJ pictures found online, jump to now playing, type to jump
 
 See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 
@@ -178,15 +182,11 @@ See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 
 Not scheduled; picked from as releases come up.
 
-- **Missing album covers found online**, for albums with no art (saved in `data`, never written into the music files)
-- **DJ pictures from Deezer** in Melora itself, for DJ folders without a picture
 - **More file types**: M4A/ALAC, WAV, Ogg Vorbis, if they're ever needed
 - **Exclusive output**: bit-for-bit playback, bypassing Windows' mixer
 - **Gapless across sample rates**, for albums that mix 44.1 and 48 kHz
 - **Station logos** while no song cover is found
 - **Back up and restore stations** as a file
-- **Jump to now playing**: one click back to the playing track
-- **Type to jump**: typing in a list jumps to the first artist or DJ starting with those letters (not search)
 - **Signing the exe**, so SmartScreen doesn't warn on downloads (costs money; only matters if Melora is shared)
 - **Keyboard and screen-reader pass**: every control reachable and labelled
 

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Melora.Discord;
 
 namespace Melora.Library;
 
@@ -32,6 +33,11 @@ public sealed class AlbumGroup : ObservableObject
     /// <summary>The size the art is shown at, in device-independent pixels.</summary>
     public int ArtSize { get; init; } = AlbumArtSize;
 
+    /// <summary>What to look up online when there's no art in the folder or the files (the album, or the DJ); null for nothing.</summary>
+    public CoverQuery? OnlineQuery { get; init; }
+
+    public OnlineArt? Online { get; init; }
+
     readonly WeakReference<ImageSource?> _art = new(null);
     bool _loading;
     bool _noArt;
@@ -50,11 +56,11 @@ public sealed class AlbumGroup : ObservableObject
         }
     }
 
-    void LoadArt()
+    async Task LoadArt()
     {
         try
         {
-            var bytes = ReadArtBytes();
+            var bytes = await GetArtBytesAsync();
             if (bytes is null)
             {
                 _noArt = true;
@@ -96,11 +102,11 @@ public sealed class AlbumGroup : ObservableObject
     Task<Color?>? _accent;
 
     /// <summary>The accent colour picked from this album's art (null for none or grey art). Worked out once.</summary>
-    public Task<Color?> GetAccentAsync() => _accent ??= Task.Run(() =>
+    public Task<Color?> GetAccentAsync() => _accent ??= Task.Run(async () =>
     {
         try
         {
-            return ReadArtBytes() is { } bytes ? Theme.Accent.FromImage(bytes) : null;
+            return await GetArtBytesAsync() is { } bytes ? Theme.Accent.FromImage(bytes) : null;
         }
         catch
         {
@@ -108,12 +114,25 @@ public sealed class AlbumGroup : ObservableObject
         }
     });
 
-    /// <summary>The raw cover image (folder image first, then embedded art), or null. Reads from disk.</summary>
-    public byte[]? ReadArtBytes()
+    /// <summary>
+    /// The raw cover image: the folder image, then embedded art, then a picture found online earlier.
+    /// Null for none. Reads from disk only.
+    /// </summary>
+    public byte[]? ReadArtBytes() =>
+        Try(FindFolderCover) ?? Try(ReadEmbeddedCover) ?? (OnlineQuery is { } query ? Try(() => Online?.ReadSaved(query)) : null);
+
+    /// <summary>As <see cref="ReadArtBytes"/>, but looks the picture up online (and saves it) if there's none yet.</summary>
+    public async Task<byte[]?> GetArtBytesAsync()
+    {
+        if (await Task.Run(ReadArtBytes) is { } bytes) return bytes;
+        return OnlineQuery is { } query && Online is { } online ? await online.FindAsync(query) : null;
+    }
+
+    static byte[]? Try(Func<byte[]?> read)
     {
         try
         {
-            return FindFolderCover() ?? ReadEmbeddedCover();
+            return read();
         }
         catch
         {

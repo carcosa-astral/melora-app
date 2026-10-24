@@ -5,6 +5,7 @@ using DragCompletedEventArgs = System.Windows.Controls.Primitives.DragCompletedE
 using DragDeltaEventArgs = System.Windows.Controls.Primitives.DragDeltaEventArgs;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Melora.Interop;
 using Melora.Library;
@@ -230,7 +231,7 @@ public partial class MainWindow : Window
         if (_vm.CurrentTrack is { } track)
         {
             key = "track|" + track.Path;
-            if (key != _overlayKey) _overlay.Show(track.Title, track.Artist, track.Group.Title, track.Group.ReadArtBytes);
+            if (key != _overlayKey) _overlay.Show(track.Title, track.Artist, track.Group.Title, track.Group.GetArtBytesAsync);
         }
         else if (_vm.CurrentStation is { } station)
         {
@@ -238,7 +239,7 @@ public partial class MainWindow : Window
             key = $"station|{station.Id}|{station.Name}|{_vm.StreamTitle}|{cover?.Length}";
             var (artist, title) = StreamMetadata.SplitArtistTitle(_vm.StreamTitle);
             if (key != _overlayKey)
-                _overlay.Show(title ?? station.Name, artist ?? station.Name, station.Name, cover is null ? null : () => cover);
+                _overlay.Show(title ?? station.Name, artist ?? station.Name, station.Name, cover is null ? null : () => Task.FromResult<byte[]?>(cover));
         }
         else
         {
@@ -415,6 +416,12 @@ public partial class MainWindow : Window
             case Key.L when ctrl:
                 _vm.ToggleLove();
                 break;
+            case Key.J when ctrl:
+                JumpToPlaying();
+                break;
+            case Key.Space when IsTyping:
+                TypeToJump(" "); // part of a name ("barry c"), not play/pause
+                break;
             case Key.Space:
                 _vm.PlayPause(Selected);
                 break;
@@ -434,5 +441,97 @@ public partial class MainWindow : Window
                 return;
         }
         e.Handled = true;
+    }
+
+    // ---- Jumping around the lists ----
+
+    static readonly TimeSpan TypingPause = TimeSpan.FromSeconds(1);
+    string _typed = "";
+    DateTime _typedAt;
+
+    /// <summary>Letters typed less than a second apart make up one name.</summary>
+    bool IsTyping => _typed.Length > 0 && DateTime.UtcNow - _typedAt < TypingPause;
+
+    void OnPreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        if (e.Text.Length == 0 || char.IsControl(e.Text[0]) || (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Alt)) != 0) return;
+        e.Handled = true;
+        TypeToJump(e.Text);
+    }
+
+    /// <summary>Jumps to the first artist (Music), DJ (Mixes) or station whose name starts with what's been typed.</summary>
+    async void TypeToJump(string text)
+    {
+        _typed = (IsTyping ? _typed : "") + text;
+        _typedAt = DateTime.UtcNow;
+
+        var (list, target) = _vm.Tab switch
+        {
+            LibraryTab.Music => (MusicList, ListJump.Find(_vm.Music.Tracks, t => t.Group.Artist, _typed)),
+            LibraryTab.Mixes => (MixesList, ListJump.Find(_vm.Mixes.Tracks, t => t.Collection, _typed)),
+            _ => (StationList, (object?)ListJump.Find(_vm.Stations, s => s.Name, _typed)),
+        };
+        if (target is not null) await ShowInList(list, target);
+    }
+
+    void OnNowPlayingClick(object sender, MouseButtonEventArgs e) => JumpToPlaying();
+
+    /// <summary>Shows the playing track or station in its list, switching tabs if needed.</summary>
+    async void JumpToPlaying()
+    {
+        if (_vm.CurrentTrack is { } track)
+        {
+            var mixes = track.Library == LibraryKind.Mixes;
+            // After a rescan the list holds new Track objects; the playing one is marked.
+            var row = (mixes ? _vm.Mixes : _vm.Music).Tracks.FirstOrDefault(t => t.IsPlaying);
+            if (row is null) return;
+            _vm.Tab = mixes ? LibraryTab.Mixes : LibraryTab.Music;
+            await ShowInList(mixes ? MixesList : MusicList, row);
+        }
+        else if (_vm.CurrentStation is { } station)
+        {
+            _vm.Tab = LibraryTab.Radio;
+            await ShowInList(StationList, station);
+        }
+    }
+
+    /// <summary>
+    /// Selects a row and scrolls to it: its album or DJ heading at the top of the list if the row
+    /// still fits on screen that way, otherwise the row a third of the way down.
+    /// </summary>
+    async Task ShowInList(ListView list, object item)
+    {
+        // A tab that was just switched to has to be laid out before it can scroll.
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Loaded);
+        list.SelectedItem = item;
+        list.ScrollIntoView(item);
+        list.UpdateLayout();
+        if (list.ItemContainerGenerator.ContainerFromItem(item) is not ListViewItem row || FindChild<ScrollViewer>(list) is not { } viewer) return;
+        row.Focus();
+        list.UpdateLayout();
+
+        var rowTop = row.TransformToAncestor(viewer).Transform(default).Y;
+        var headingTop = OutermostGroup(row, list)?.TransformToAncestor(viewer).Transform(default).Y ?? rowTop;
+        var fits = rowTop - headingTop + row.ActualHeight <= viewer.ViewportHeight;
+        viewer.ScrollToVerticalOffset(viewer.VerticalOffset + (fits ? headingTop : rowTop - viewer.ViewportHeight / 3));
+    }
+
+    /// <summary>The album or DJ heading a row sits under (not a disc heading inside an album).</summary>
+    static GroupItem? OutermostGroup(DependencyObject row, ListView list)
+    {
+        GroupItem? group = null;
+        for (var node = VisualTreeHelper.GetParent(row); node is not null && node != list; node = VisualTreeHelper.GetParent(node))
+            if (node is GroupItem g) group = g;
+        return group;
+    }
+
+    static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if ((child as T ?? FindChild<T>(child)) is { } found) return found;
+        }
+        return null;
     }
 }
