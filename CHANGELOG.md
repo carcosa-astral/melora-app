@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-04
+
 ### Fixed
 - A file renamed only in upper/lower case (as Picard and Mp3tag do) and re-tagged was stored twice,
   and the next scan then failed, so Melora said it couldn't start and closed. Such files are now
