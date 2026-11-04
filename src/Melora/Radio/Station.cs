@@ -43,7 +43,16 @@ public sealed class Station : ObservableObject
 
     public string Subtitle => NowPlaying ?? Host;
 
+    public override string ToString() => $"{Name}, {Subtitle}";
+
     System.Windows.Media.ImageSource? _art;
     /// <summary>The cover of the song playing now, when one was found online.</summary>
     public System.Windows.Media.ImageSource? Art { get => _art; set => Set(ref _art, value); }
+
+    System.Windows.Media.ImageSource? _logo;
+    /// <summary>The station's logo, found online; shown while there's no song cover.</summary>
+    public System.Windows.Media.ImageSource? Logo { get => _logo; set => Set(ref _logo, value); }
+
+    /// <summary>The logo as downloaded, for the media overlay and the accent colour.</summary>
+    public byte[]? LogoBytes { get; set; }
 }

@@ -5,6 +5,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-04
+
+Smoother playback, radio logos, and a keyboard and screen-reader pass.
+
+### Added
+- Pausing and stopping fade out over 150 ms instead of cutting off, and resuming fades back in, so
+  neither clicks.
+- Gapless playback now carries on into a track in another sample rate or channel layout (say a 48 kHz
+  bonus track on a 44.1 kHz album, or a mono recording): it's converted to match as it plays, through
+  the BASSmix add-on, which now ships with Melora. Seeking within such a track plays it in its own format.
+- Station logos, from Radio Browser (the community station directory): found by the station's address,
+  or else its name, and shown on its row while no song cover is. The media overlay and accent colour use
+  the logo too. They follow the "Find missing covers, DJ pictures and station logos online" setting.
+- Export and import stations: the ⋯ button next to Add station saves them to an `.m3u` file (which other
+  players can open too) and reads one back, skipping stations you already have. A new PC can start from
+  "Import stations…" on the empty Radio page.
+- Each DJ's heading in Mixes shows how many mixes there are, their total length and the years they span:
+  "12 mixes · 9h 30m · 2014–2025".
+- "Open log" in Settings, to see what went wrong without showing.
+- Keyboard and screen readers: the transport buttons, tabs, seek bar and volume can now be reached with
+  Tab, and show an accent ring when they have keyboard focus (never with the mouse). Enter presses a
+  focused button; Space is still play/pause everywhere. The seek bar moves 5 s with the arrow keys and
+  30 s with Page Up/Down. Every button and slider has a name for screen readers, and list rows read
+  out as "title, artist, length" rather than a type name.
+
+### Changed
+- Totals under an hour read "45m" rather than "0h 45m".
+
 ## [1.3.2] - 2026-11-04
 
 ### Fixed

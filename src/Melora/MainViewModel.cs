@@ -116,6 +116,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
         _timer.Start();
         Discord.Start();
+        foreach (var station in Stations.ToList()) _ = LoadLogoAsync(station);
         _ = Scrobbler.FlushAsync(); // anything left over from last time
         _ = Updates.CheckIfDueAsync();
         await RescanAsync();
@@ -597,7 +598,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     void StopStation()
     {
-        _engine.Stop();
+        _engine.FadeOutAndStop();
         IsPlaying = false;
         _streamTitle = null;
         UpdateRadioArt();
@@ -620,7 +621,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     void StopAll()
     {
-        _engine.Stop();
+        _engine.FadeOutAndStop();
         _currentTrack = null;
         Scrobbler.TrackStopped();
         ClearStation();
@@ -674,6 +675,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             // New album headings pick the change up (showing or dropping the found pictures).
             Music.Reload();
             Mixes.Reload();
+            foreach (var station in Stations.ToList()) _ = LoadLogoAsync(station);
         }
     }
 
@@ -695,8 +697,31 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     byte[]? _radioArt;
     string? _radioArtKey;
 
-    /// <summary>The cover of the song on the radio, as found online; null while there's none.</summary>
-    public byte[]? RadioArt => _radioArt;
+    /// <summary>The cover of the song on the radio, as found online, or else the station's logo; null for neither.</summary>
+    public byte[]? RadioArt => _radioArt ?? _currentStation?.LogoBytes;
+
+    /// <summary>Finds (or drops, with online pictures turned off) a station's logo.</summary>
+    async Task LoadLogoAsync(Station station)
+    {
+        var url = station.Url;
+        var bytes = await OnlineArt.FindAsync(new CoverQuery(station.Name, null, null, null, url));
+        System.Windows.Media.ImageSource? logo = null;
+        if (bytes is not null)
+        {
+            try
+            {
+                logo = await Task.Run(() => AlbumGroup.Decode(bytes, StationArtSize));
+            }
+            catch
+            {
+                bytes = null; // not a picture WPF can show
+            }
+        }
+        if (station.Url != url) return; // the address changed meanwhile; that lookup wins
+        station.Logo = logo;
+        station.LogoBytes = bytes;
+        if (station == _currentStation) OnPropertyChanged(nameof(RadioArt));
+    }
 
     async void UpdateRadioArt()
     {
@@ -794,7 +819,21 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         var station = new Station { Id = _db.AddStation(name, url), Name = name, Url = url };
         InsertSorted(station);
+        _ = LoadLogoAsync(station);
         return station;
+    }
+
+    /// <summary>Adds the stations whose address isn't in the list yet. Returns how many were added.</summary>
+    public int ImportStations(IEnumerable<(string Name, string Url)> stations)
+    {
+        var added = 0;
+        foreach (var (name, url) in stations)
+        {
+            if (Stations.Any(s => string.Equals(s.Url, url, StringComparison.OrdinalIgnoreCase))) continue;
+            AddStation(name, url);
+            added++;
+        }
+        return added;
     }
 
     public void UpdateStation(Station station, string name, string url)
@@ -806,6 +845,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Stations.Remove(station);
         InsertSorted(station);
         OnNowPlayingChanged();
+
+        if (urlChanged) _ = LoadLogoAsync(station);
 
         // Re-tune if the address of the station being played changed.
         if (urlChanged && _currentStation == station && _engine.IsLive) _ = PlayStation(station);

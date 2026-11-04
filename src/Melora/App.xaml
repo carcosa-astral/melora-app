@@ -22,6 +22,18 @@
         <SolidColorBrush x:Key="ArtPlaceholderBrush" Color="#12FFFFFF" />
         <SolidColorBrush x:Key="SliderTrackBrush" Color="#26FFFFFF" />
 
+        <!-- ===== Keyboard focus: an accent ring, only when focus came from the keyboard ===== -->
+        <Style x:Key="FocusRing">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Border Margin="-2" CornerRadius="7" BorderThickness="2" BorderBrush="{DynamicResource AccentBrush}"
+                                SnapsToDevicePixels="True" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- ===== Icon buttons (transport, settings) ===== -->
         <Style x:Key="IconButton" TargetType="ButtonBase">
             <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
@@ -30,7 +42,7 @@
             <Setter Property="Width" Value="34" />
             <Setter Property="Height" Value="34" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Focusable" Value="False" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ButtonBase">
@@ -53,6 +65,7 @@
         <!-- ===== Text buttons (dialogs, empty state) ===== -->
         <Style x:Key="TextButton" TargetType="Button">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="Padding" Value="14,6" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
@@ -81,7 +94,7 @@
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Margin" Value="0,0,22,0" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Focusable" Value="False" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
             <Setter Property="Template">
                 <Setter.Value>
@@ -111,6 +124,7 @@
         <!-- ===== Thin slider (seek, volume) ===== -->
         <Style x:Key="SliderFill" TargetType="RepeatButton">
             <Setter Property="Focusable" Value="False" />
+            <Setter Property="AutomationProperties.Name" Value="Step back" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
@@ -124,6 +138,7 @@
         </Style>
         <Style x:Key="SliderEmpty" TargetType="RepeatButton">
             <Setter Property="Focusable" Value="False" />
+            <Setter Property="AutomationProperties.Name" Value="Step forward" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
@@ -133,7 +148,7 @@
             </Setter>
         </Style>
         <Style x:Key="ThinSlider" TargetType="Slider">
-            <Setter Property="Focusable" Value="False" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="IsMoveToPointEnabled" Value="True" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Cursor" Value="Hand" />
@@ -339,7 +354,7 @@
         <Style TargetType="CheckBox">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="CheckBox">

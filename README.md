@@ -15,21 +15,24 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | | |
 |---|---|
 | Formats | FLAC, Opus, MP3 |
-| Gapless | Music plays straight from one track into the next, with no gap (tracks in the same sample rate and channel layout) |
+| Gapless | Music plays straight from one track into the next, with no gap, even when the next track has another sample rate or channel layout (it's converted as it plays, with BASSmix) |
+| Fades | Pausing and stopping fade out over 150 ms, and resuming fades back in, so nothing clicks |
 | Output | Follows Windows' default output device, e.g. when headphones are plugged in |
 | Shuffle | Every track plays once before any repeats, and the same artist or album never plays back-to-back |
 | Repeat | Off, all, one |
 | Library | Watched folders, rescanned automatically when files change. Albums with several discs get a heading per disc (from the disc tag, or `CD1`/`Disc 2` folders), and compilations without an album artist stay together as "Various Artists" |
-| Missing art | Albums and DJ folders without a picture of their own get one from the Cover Art Archive, iTunes or Deezer (DJ photos from Deezer). Kept in `data\covers`; your music files and folders are never changed. Can be turned off in Settings |
+| Missing art | Albums and DJ folders without a picture of their own get one from the Cover Art Archive, iTunes or Deezer (DJ photos from Deezer), and stations get their logo from Radio Browser. Kept in `data\covers`; your music files and folders are never changed. Can be turned off in Settings |
 | Getting around | Type the first letters of an artist, DJ or station to jump to it (not a search: nothing is hidden); the same letter again steps to the next one. Click what's playing in the status bar, or press Ctrl+J, to jump back to it |
-| Mixes | Their own folders, grouped A–Z by DJ: the folder each mix sits in (`Mixes\DJ Name\...`), then by date, oldest first (a date in the title like "(2020-10-14)", or the year tag). Double-click to play; shuffle works here too. A mixes folder inside a music folder only shows up in Mixes |
-| Radio | Paste an address (direct stream, `.pls`, `.m3u` or HLS `.m3u8`), check it, name it, save. Shows what the station is playing live, with the song's cover (looked up on iTunes and Deezer; can be turned off). MP3, AAC, Ogg Vorbis and Opus streams |
+| Mixes | Their own folders, grouped A–Z by DJ: the folder each mix sits in (`Mixes\DJ Name\...`), then by date, oldest first (a date in the title like "(2020-10-14)", or the year tag). Each DJ's heading shows how many mixes, their total length and the years they span. Double-click to play; shuffle works here too. A mixes folder inside a music folder only shows up in Mixes |
+| Radio | Paste an address (direct stream, `.pls`, `.m3u` or HLS `.m3u8`), check it, name it, save. Shows each station's logo, and what it's playing live with the song's cover (looked up on iTunes and Deezer; can be turned off). The ⋯ button next to Add station exports your stations to an `.m3u` file and imports them again (skipping ones you already have). MP3, AAC, Ogg Vorbis and Opus streams |
 | Tray | Minimizing sends Melora to the system tray (can be turned off in Settings); closing the window quits. Left-click the icon to show or hide Melora; right-click for play/pause, next, previous and Quit. The tooltip shows what's playing |
 | Media keys | Keyboard media keys and the Windows media overlay (volume flyout, lock screen) show the track, cover art and progress, and control playback |
 | Scrobbling | Last.fm and ListenBrainz, set up in Settings. Counts a play after half the track or 4 minutes of actual listening; radio and tracks under 30 s are skipped, mixes optional. Plays made offline are queued and sent later |
 | Love | The heart in the transport bar (or Ctrl+L) loves the playing track on Last.fm and ListenBrainz. Loves made offline are sent later; tracks loved on the Last.fm website show as loved |
 | Discord | "Listening to Melora" on your Discord profile, with the track, a progress bar and the album cover. Mixes and radio can be left out; nothing shows while paused |
 | Updates | Settings shows the version and checks GitHub once a day for a newer one, with a link to it. Nothing is downloaded or installed; can be turned off |
+| Log | `data\melora.log` keeps what went wrong without showing (skipped files, refused scrobbles, dropped stations); "Open log" in Settings opens it |
+| Accessibility | Every control can be reached with Tab and shows an accent ring when it has keyboard focus; buttons, sliders and list rows have names for screen readers |
 | One instance | Launching Melora again brings the running copy back instead of starting a second one |
 | Look | Dark theme, Mica backdrop on Windows 11, IBM Plex Sans and Plex Mono (bundled, so no font install needed). The accent colour fades to a colour from the playing album's art (can be turned off in Settings) |
 | Columns | Drag the dividers in the list headers to resize Artist and Length; Title takes the rest |
@@ -41,7 +44,9 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | Key | Action |
 |---|---|
 | `Space` | Play / pause |
-| `Enter` | Play the selected track |
+| `Enter` | Play the selected track (or press the button that has keyboard focus) |
+| `Tab` | Move between the controls |
+| `←` `→` on the seek bar | Back or forward 5 s (`Page Up` / `Page Down`: 30 s) |
 | `Ctrl` + `→` | Next track |
 | `Ctrl` + `←` | Previous track (restarts the track if more than 3 s in) |
 | `Ctrl` + `L` | Love or un-love the playing track |
@@ -175,7 +180,8 @@ lib/bass/         Native BASS libraries (x64)
 8. ~~**1.2**: HLS radio streams (like the BBC's), disc headings and compilation albums, plus the planned 1.1
    (build and test on GitHub, one-command releases, a "new version" notice in Settings), released together~~
 9. ~~**1.3, pictures and getting around**: missing album covers and DJ pictures found online, jump to now playing, type to jump~~
-10. **Next**: not picked yet; see the ideas below
+10. ~~**2.0**: fades on pause and stop, gapless across sample rates, station logos, backing up stations, DJ heading details, "Open log", a keyboard and screen-reader pass~~
+11. **Next**: not picked yet; see the ideas below
 
 See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 
@@ -184,18 +190,15 @@ See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 Not scheduled; picked from as releases come up.
 
 - **More file types**: M4A/ALAC, WAV, Ogg Vorbis, if they're ever needed
-- **Exclusive output**: bit-for-bit playback, bypassing Windows' mixer
-- **Gapless across sample rates**, for albums that mix 44.1 and 48 kHz
-- **Station logos** while no song cover is found
-- **Back up and restore stations** as a file
-- **Signing the exe**, so SmartScreen doesn't warn on downloads (costs money; only matters if Melora is shared)
-- **Keyboard and screen-reader pass**: every control reachable and labelled
+- **Signing the exe**, so SmartScreen doesn't warn on downloads (on hold: costs money, and only matters if Melora is shared)
 
 ### Not planned
 
 Playlists, a queue, search, an equalizer, ReplayGain, lyrics, discovery, visualizers, layout editing,
-a mini player, a sleep timer, cue sheets, resuming where you left off, taskbar controls, and an updater
-that downloads or installs anything.
+a mini player, a sleep timer, cue sheets, resuming where you left off, taskbar controls, an updater
+that downloads or installs anything, exclusive (WASAPI) output, opening files in Explorer, Mp3tag or
+Picard, a library check, re-reading tags on demand, dropping folders onto the window, per-disc covers,
+a history of what a station played, and starting minimized or with Windows.
 
 ## Third-party components
 

@@ -45,3 +45,27 @@ public class StreamMetadataTests
     public void NormalizeUrl(string input, string? expected) =>
         Assert.Equal(expected, StreamMetadata.NormalizeUrl(input));
 }
+
+public class StationFileTests
+{
+    [Fact]
+    public void Stations_RoundTrip_ThroughAnM3uFile()
+    {
+        var stations = new List<(string, string)>
+        {
+            ("Groove Salad", "https://somafm.com/groovesalad256.pls"),
+            ("BBC Radio 1 Dance, UK", "http://lstn.lv/bbcradio.m3u8?station=bbc_radio_one_dance&bitrate=320000"),
+        };
+
+        var text = StationFile.Write(stations);
+
+        Assert.StartsWith("#EXTM3U", text);
+        Assert.Equal(stations, StationFile.Read(text));
+    }
+
+    [Fact]
+    public void Read_TakesPlainAddresses_AndSkipsAnythingElse() =>
+        Assert.Equal(
+            [("ice.example.org", "http://ice.example.org/live"), ("Named", "https://b.example/x")],
+            StationFile.Read("ice.example.org/live\n# a comment\nnot an address at all\n#EXTINF:123,Named\nhttps://b.example/x\n"));
+}

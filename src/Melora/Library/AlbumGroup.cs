@@ -30,6 +30,8 @@ public sealed class AlbumGroup : ObservableObject
 
     public string Subtitle => Year > 0 ? $"{Artist}  ·  {Year}" : Artist;
 
+    public override string ToString() => Year > 0 ? $"{Title}, {Artist}, {Year}" : $"{Title}, {Artist}";
+
     /// <summary>The size the art is shown at, in device-independent pixels.</summary>
     public int ArtSize { get; init; } = AlbumArtSize;
 

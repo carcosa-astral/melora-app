@@ -27,14 +27,15 @@ public sealed class AudioEngineTests(AudioEngineTests.Engine shared) : IClassFix
         Directory.Delete(_dir, recursive: true);
     }
 
-    /// <summary>A WAV file of silence, 16-bit stereo.</summary>
-    string Wav(string name, double seconds, int rate = 44100)
+    /// <summary>A WAV file of silence, 16-bit.</summary>
+    string Wav(string name, double seconds, int rate = 44100, short channels = 2)
     {
         var path = Path.Combine(_dir, name);
-        var bytes = (int)(seconds * rate) * 4;
+        var frame = channels * 2;
+        var bytes = (int)(seconds * rate) * frame;
         using var w = new BinaryWriter(File.Create(path));
         w.Write("RIFF"u8); w.Write(36 + bytes); w.Write("WAVE"u8);
-        w.Write("fmt "u8); w.Write(16); w.Write((short)1); w.Write((short)2); w.Write(rate); w.Write(rate * 4); w.Write((short)4); w.Write((short)16);
+        w.Write("fmt "u8); w.Write(16); w.Write((short)1); w.Write(channels); w.Write(rate); w.Write(rate * frame); w.Write((short)frame); w.Write((short)16);
         w.Write("data"u8); w.Write(bytes); w.Write(new byte[bytes]);
         return path;
     }
@@ -78,10 +79,80 @@ public sealed class AudioEngineTests(AudioEngineTests.Engine shared) : IClassFix
         Assert.Equal(second, _engine.PlayingPath);
     }
 
-    [Fact]
-    public void ADifferentSampleRate_IsNotQueued()
+    [Theory]
+    [InlineData(48000, 2)] // another sample rate
+    [InlineData(44100, 1)] // mono after stereo
+    public void ATrackInAnotherFormat_IsConverted_AndFollowsOn(int rate, short channels)
     {
-        Assert.True(_engine.Play(Wav("a.wav", 1)));
-        Assert.False(_engine.SetNext(Wav("b.wav", 1, rate: 48000)));
+        var (first, second) = (Wav("a.wav", 0.5), Wav("b.wav", 3, rate, channels));
+        Assert.True(_engine.Play(first));
+        Assert.True(_engine.SetNext(second));
+
+        Assert.True(WaitForAdvance(TimeSpan.FromSeconds(5)));
+        Assert.Equal(second, _engine.PlayingPath);
+        Assert.InRange(_engine.Length, 2.9, 3.1);
+        Assert.InRange(_engine.Position, 0, 1);
+
+        // Seeking in a converted track rebuilds the output in its own format; the position holds.
+        _engine.Position = 2;
+        Assert.InRange(_engine.Position, 1.9, 2.3);
+        Assert.Equal(second, _engine.PlayingPath);
+    }
+
+    /// <summary>Waits for something a background fade will make true (a busy test run can be slow to get to it).</summary>
+    static bool Eventually(Func<bool> condition)
+    {
+        var clock = Stopwatch.StartNew();
+        while (!condition())
+        {
+            if (clock.Elapsed > TimeSpan.FromSeconds(5)) return false;
+            Thread.Sleep(20);
+        }
+        return true;
+    }
+
+    /// <summary>The position stays put for a moment, i.e. the fade-out has ended in a pause.</summary>
+    bool Holds()
+    {
+        var before = _engine.Position;
+        Thread.Sleep(150);
+        return Math.Abs(_engine.Position - before) < 0.005;
+    }
+
+    [Fact]
+    public void Pause_FadesOut_ThenHolds_AndResumeCarriesOn()
+    {
+        Assert.True(_engine.Play(Wav("a.wav", 5)));
+        Thread.Sleep(300);
+
+        _engine.Pause();
+        Assert.False(_engine.IsPlaying); // straight away, while it fades
+        Assert.True(Eventually(Holds));
+        var held = _engine.Position;
+
+        _engine.Resume();
+        Assert.True(_engine.IsPlaying);
+        Assert.True(Eventually(() => _engine.Position > held + 0.1));
+    }
+
+    [Fact]
+    public void ResumingDuringTheFade_KeepsPlaying()
+    {
+        Assert.True(_engine.Play(Wav("a.wav", 5)));
+        _engine.Pause();
+        _engine.Resume();
+        Thread.Sleep(400); // past the fade, which must not pause it now
+        Assert.True(_engine.IsPlaying);
+        Assert.False(Holds());
+    }
+
+    [Fact]
+    public void FadeOutAndStop_CountsAsStopped_AtOnce()
+    {
+        Assert.True(_engine.Play(Wav("a.wav", 5)));
+        _engine.FadeOutAndStop();
+        Assert.False(_engine.IsLoaded);
+        Assert.False(_engine.IsPlaying);
+        Assert.True(Eventually(() => _engine.PlayingPath is null)); // freed once faded
     }
 }

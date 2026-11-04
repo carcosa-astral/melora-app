@@ -8,20 +8,22 @@ using Melora.Library;
 namespace Melora.Discord;
 
 /// <summary>
-/// What to find a picture for: an album, a single song (radio), or with neither, the artist
-/// themself (a DJ, for mixes). For an album, a file from it can be given, whose MusicBrainz release
-/// ID (if tagged) finds the exact cover.
+/// What to find a picture for: an album, a single song (radio), a radio station's logo (by its
+/// address, with its name in Artist), or with none of those, the artist themself (a DJ, for mixes).
+/// For an album, a file from it can be given, whose MusicBrainz release ID (if tagged) finds the
+/// exact cover.
 /// </summary>
-public sealed record CoverQuery(string Artist, string? Album, string? Title, string? SamplePath = null)
+public sealed record CoverQuery(string Artist, string? Album, string? Title, string? SamplePath = null, string? StationUrl = null)
 {
-    public bool IsArtist => Album is null && Title is null;
+    public bool IsStation => StationUrl is not null;
+    public bool IsArtist => Album is null && Title is null && !IsStation;
 }
 
 /// <summary>
 /// Finds a web address for a cover, since Discord can only show pictures from the web, not files on
 /// this PC. Tries the Cover Art Archive (only for files tagged with a MusicBrainz release), then
-/// iTunes, then Deezer; artist photos come from Deezer only. Answers are kept in the database: a
-/// found cover for good, a miss for a week.
+/// iTunes, then Deezer; artist photos come from Deezer only, and station logos from Radio Browser.
+/// Answers are kept in the database: a found cover for good, a miss for a week.
 /// </summary>
 public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
 {
@@ -57,7 +59,8 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
 
         string? url = null;
         var unreachable = false;
-        foreach (var source in new Func<CoverQuery, Task<string?>>[] { CoverArtArchiveAsync, ITunesAsync, DeezerAsync })
+        Func<CoverQuery, Task<string?>>[] sources = query.IsStation ? [RadioBrowserAsync] : [CoverArtArchiveAsync, ITunesAsync, DeezerAsync];
+        foreach (var source in sources)
         {
             try
             {
@@ -76,7 +79,8 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
     }
 
     public static string Key(CoverQuery query) =>
-        query.IsArtist ? $"artist|{Normalize(query.Artist)}"
+        query.IsStation ? $"station|{query.StationUrl}"
+        : query.IsArtist ? $"artist|{Normalize(query.Artist)}"
         : query.Album is { } album ? $"album|{Normalize(query.Artist)}|{Normalize(album)}"
         : $"song|{Normalize(query.Artist)}|{Normalize(query.Title ?? "")}";
 
@@ -138,13 +142,33 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
         return null;
     }
 
+    /// <summary>
+    /// A station's logo from Radio Browser (the community station directory): the entry with the
+    /// same stream address, or else the most voted-for one whose name contains the station's.
+    /// </summary>
+    async Task<string?> RadioBrowserAsync(CoverQuery query)
+    {
+        const string api = "https://all.api.radio-browser.info/json/stations/";
+        string? Logo(JsonNode? station) => station?["favicon"]?.GetValue<string>() is { Length: > 0 } url ? url : null;
+
+        var byUrl = await GetJsonAsync($"{api}byurl?url={Uri.EscapeDataString(query.StationUrl!)}");
+        if ((byUrl?.AsArray() ?? []).Select(Logo).FirstOrDefault(url => url is not null) is { } exact) return exact;
+
+        var name = Normalize(query.Artist);
+        if (name.Length == 0) return null;
+        var byName = await GetJsonAsync($"{api}search?name={Uri.EscapeDataString(query.Artist)}&order=votes&reverse=true&hidebroken=true&limit=20");
+        return (byName?.AsArray() ?? [])
+            .Where(s => Normalize(s?["name"]?.GetValue<string>() ?? "").Contains(name, StringComparison.Ordinal))
+            .Select(Logo).FirstOrDefault(url => url is not null);
+    }
+
     async Task<JsonNode?> GetJsonAsync(string url)
     {
         using var response = await http.GetAsync(url);
         if (!response.IsSuccessStatusCode) throw new HttpRequestException($"{(int)response.StatusCode} from {new Uri(url).Host}");
         var json = JsonNode.Parse(await response.Content.ReadAsStringAsync());
         // Deezer reports quota and other errors inside a normal-looking answer.
-        if (json?["error"] is not null) throw new HttpRequestException($"Error from {new Uri(url).Host}");
+        if (json is JsonObject { } obj && obj["error"] is not null) throw new HttpRequestException($"Error from {new Uri(url).Host}");
         return json;
     }
 

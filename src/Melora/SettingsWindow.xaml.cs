@@ -174,7 +174,33 @@ public partial class SettingsWindow : Window
 
     async void OnCheckUpdates(object sender, RoutedEventArgs e) => await _vm.Updates.CheckAsync();
 
+    /// <summary>Opens the log in whatever opens .log files (Notepad, usually); an empty one if nothing's gone wrong yet.</summary>
+    void OnOpenLog(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!System.IO.File.Exists(Log.FilePath)) System.IO.File.WriteAllText(Log.FilePath, "");
+            Process.Start(new ProcessStartInfo(Log.FilePath) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageDialog.Inform(this, "Couldn't open the log", ex.Message);
+        }
+    }
+
     void OnDone(object sender, RoutedEventArgs e) => Close();
+}
+
+/// <summary>A DJ's heading line in Mixes, from the heading's items (see <see cref="Library.TrackLibrary.DjSummary"/>).</summary>
+public sealed class DjSummaryConverter : IValueConverter
+{
+    public static DjSummaryConverter Instance { get; } = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is System.Collections.IEnumerable items ? Library.TrackLibrary.DjSummary(items.OfType<Library.Track>().ToList()) : "";
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
 }
 
 public sealed class NotNullConverter : IValueConverter

@@ -48,6 +48,19 @@ public sealed class TrackLibrary : ObservableObject
         Reloaded?.Invoke();
     }
 
+    /// <summary>A DJ's heading line: "12 mixes · 9h 30m · 2014–2025" (the years from the mixes' dates, when they have any).</summary>
+    public static string DjSummary(IReadOnlyCollection<Track> mixes)
+    {
+        var parts = new List<string>
+        {
+            mixes.Count == 1 ? "1 mix" : $"{mixes.Count:N0} mixes",
+            FormatTotal(TimeSpan.FromTicks(mixes.Sum(t => t.Duration.Ticks))),
+        };
+        var years = mixes.Select(t => LibraryService.MixDate(t.Title, t.Group.Year)?.Year).OfType<int>().ToList();
+        if (years.Count > 0) parts.Add(years.Min() == years.Max() ? $"{years.Min()}" : $"{years.Min()}–{years.Max()}");
+        return string.Join("  ·  ", parts);
+    }
+
     public async Task RescanAsync()
     {
         IsScanning = true;
@@ -61,6 +74,8 @@ public sealed class TrackLibrary : ObservableObject
         }
     }
 
-    static string FormatTotal(TimeSpan t) =>
-        t.TotalDays >= 1 ? $"{(int)t.TotalDays}d {t.Hours}h" : $"{(int)t.TotalHours}h {t.Minutes}m";
+    public static string FormatTotal(TimeSpan t) =>
+        t.TotalDays >= 1 ? $"{(int)t.TotalDays}d {t.Hours}h"
+        : t.TotalHours >= 1 ? $"{(int)t.TotalHours}h {t.Minutes}m"
+        : $"{t.Minutes}m";
 }

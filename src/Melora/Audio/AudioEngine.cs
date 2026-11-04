@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using ManagedBass;
 using Melora.Radio;
 
@@ -26,15 +27,30 @@ public sealed class AudioEngine : IDisposable
     // default output device changes (headphones plugged in, a different device picked).
     const Configuration FollowDefaultDevice = (Configuration)36;
 
-    /// <summary>A track feeding the output: its decoder and where it begins in the output stream.</summary>
-    sealed class Segment(int decoder, string path)
+    /// <summary>Pausing and stopping fade out over this long, and resuming fades back in, so neither clicks.</summary>
+    const int FadeMs = 150;
+
+    /// <summary>
+    /// A track feeding the output: its decoder, what the output reads from (the decoder itself, or a
+    /// BASSmix converter around it when its sample rate or channels differ from the output's), and
+    /// where it begins in the output stream.
+    /// </summary>
+    sealed class Segment(int decoder, int source, string path)
     {
         public int Decoder { get; } = decoder;
+        public int Source { get; set; } = source;
         public string Path { get; } = path;
         /// <summary>Output byte at which this track starts.</summary>
         public long OutputStart { get; set; }
-        /// <summary>Decoder byte playing at <see cref="OutputStart"/> (non-zero after a seek).</summary>
-        public long DecoderStart { get; set; }
+        /// <summary>Seconds into the track playing at <see cref="OutputStart"/> (non-zero after a seek).</summary>
+        public double StartSeconds { get; set; }
+        public bool IsConverted => Source != Decoder;
+
+        public void Free()
+        {
+            if (IsConverted) Bass.StreamFree(Source);
+            Bass.StreamFree(Decoder);
+        }
     }
 
     readonly SyncProcedure _onEnd;
@@ -52,6 +68,10 @@ public sealed class AudioEngine : IDisposable
     int _stream; // what's audible: the file output stream, or the live stream
     int _frequency, _channels;
     double _volume = 1.0;
+
+    // A pause or stop that's still fading out already counts as done for everyone asking.
+    int _fade; // bumped by each fade and by Resume, so an older fade knows it was overtaken
+    bool _pausing, _stopping;
 
     /// <summary>
     /// Bumped every time playback switches, so callbacks and slow connections from an
@@ -107,7 +127,7 @@ public sealed class AudioEngine : IDisposable
 
         lock (_lock)
         {
-            _segments.Add(new Segment(decoder, path));
+            _segments.Add(new Segment(decoder, decoder, path));
             _written = 0;
             _drained = false;
         }
@@ -116,10 +136,9 @@ public sealed class AudioEngine : IDisposable
     }
 
     /// <summary>
-    /// Queues the file to play straight after the current one, without a gap; null clears it.
-    /// Only a file in the same sample rate and channel layout can follow on (the output can't
-    /// change format mid-stream); returns false for anything else, which then starts normally
-    /// once the current track has ended.
+    /// Queues the file to play straight after the current one, without a gap; null clears it. The
+    /// output can't change format mid-stream, so a file in another sample rate or channel layout is
+    /// converted to the output's as it plays. Returns false if the file can't be opened.
     /// </summary>
     public bool SetNext(string? path)
     {
@@ -129,11 +148,11 @@ public sealed class AudioEngine : IDisposable
         if (path is not null)
         {
             var decoder = Bass.CreateStream(path, 0, 0, BassFlags.Decode | BassFlags.Float);
-            if (decoder != 0 && Bass.ChannelGetInfo(decoder, out var info)
-                             && info.Frequency == _frequency && info.Channels == _channels)
-                next = new Segment(decoder, path);
-            else if (decoder != 0)
-                Bass.StreamFree(decoder);
+            var source = decoder != 0 && Bass.ChannelGetInfo(decoder, out var info)
+                ? info.Frequency == _frequency && info.Channels == _channels ? decoder : Converter(decoder)
+                : 0;
+            if (source != 0) next = new Segment(decoder, source, path);
+            else if (decoder != 0) Bass.StreamFree(decoder);
         }
 
         Segment? replaced;
@@ -142,14 +161,41 @@ public sealed class AudioEngine : IDisposable
             // Too late once the output has already finished with the last track.
             if (_drained && next is not null)
             {
-                Bass.StreamFree(next.Decoder);
+                next.Free();
                 next = null;
             }
             replaced = _next;
             _next = next;
         }
-        if (replaced is not null) Bass.StreamFree(replaced.Decoder);
+        replaced?.Free();
         return next is not null;
+    }
+
+    /// <summary>
+    /// A decoding BASSmix mixer in the output's format with just this decoder in it, so a track in
+    /// another sample rate or channel layout can follow on without a gap. 0 if it can't be made.
+    /// </summary>
+    int Converter(int decoder)
+    {
+        var mixer = BassMix.StreamCreate(_frequency, _channels, BassFlags.Decode | BassFlags.Float | BassMix.End);
+        if (mixer == 0) return 0;
+        if (BassMix.AddChannel(mixer, decoder, BassMix.NoRampIn)) return mixer;
+        Bass.StreamFree(mixer);
+        return 0;
+    }
+
+    /// <summary>The two BASSmix calls Melora needs (bassmix.dll, next to the exe).</summary>
+    static class BassMix
+    {
+        public const BassFlags End = (BassFlags)0x10000;        // BASS_MIXER_END: ends when its source does
+        public const BassFlags NoRampIn = (BassFlags)0x800000;  // BASS_MIXER_CHAN_NORAMPIN: no fade-in at the join
+
+        [DllImport("bassmix", EntryPoint = "BASS_Mixer_StreamCreate")]
+        public static extern int StreamCreate(int frequency, int channels, BassFlags flags);
+
+        [DllImport("bassmix", EntryPoint = "BASS_Mixer_StreamAddChannel")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool AddChannel(int mixer, int channel, BassFlags flags);
     }
 
     /// <summary>
@@ -158,7 +204,7 @@ public sealed class AudioEngine : IDisposable
     /// </summary>
     public bool CheckAdvanced()
     {
-        if (_stream == 0 || IsLive) return false;
+        if (_stream == 0 || IsLive || _stopping) return false;
         var heard = Bass.ChannelGetPosition(_stream);
 
         Segment? finished = null;
@@ -171,7 +217,7 @@ public sealed class AudioEngine : IDisposable
             }
         }
         if (finished is null) return false;
-        Bass.StreamFree(finished.Decoder);
+        finished.Free();
         return true;
     }
 
@@ -189,7 +235,7 @@ public sealed class AudioEngine : IDisposable
             var done = 0;
             while (done < length && _segments.Count > 0)
             {
-                var got = Bass.ChannelGetData(_segments[^1].Decoder, buffer + done, length - done);
+                var got = Bass.ChannelGetData(_segments[^1].Source, buffer + done, length - done);
                 if (got > 0)
                 {
                     done += got;
@@ -270,27 +316,60 @@ public sealed class AudioEngine : IDisposable
 
     // ---- Both ----
 
-    public bool IsLoaded => _stream != 0;
+    public bool IsLoaded => _stream != 0 && !_stopping;
 
     /// <summary>True when the current stream is an internet stream rather than a file.</summary>
     public bool IsLive { get; private set; }
 
-    public bool IsPlaying => _stream != 0 && Bass.ChannelIsActive(_stream) == PlaybackState.Playing;
+    public bool IsPlaying => IsLoaded && !_pausing && Bass.ChannelIsActive(_stream) == PlaybackState.Playing;
 
-    public void Pause()
+    /// <summary>Fades out, then pauses. <see cref="IsPlaying"/> is false straight away.</summary>
+    public async void Pause()
     {
-        if (_stream != 0) Bass.ChannelPause(_stream);
+        if (!IsPlaying) return;
+        var (stream, fade) = (_stream, ++_fade);
+        _pausing = true;
+        Bass.ChannelSlideAttribute(stream, ChannelAttribute.Volume, 0, FadeMs);
+        await Task.Delay(FadeMs);
+        if (fade != _fade) return; // resumed, or stopped, meanwhile
+        if (stream == _stream) Bass.ChannelPause(stream);
+        _pausing = false;
     }
 
+    /// <summary>Carries on after a pause (or one still fading out), fading back in.</summary>
     public void Resume()
     {
-        if (_stream != 0) Bass.ChannelPlay(_stream);
+        if (!IsLoaded) return;
+        _fade++;
+        _pausing = false;
+        if (Bass.ChannelIsActive(_stream) != PlaybackState.Playing) Bass.ChannelPlay(_stream);
+        Bass.ChannelSlideAttribute(_stream, ChannelAttribute.Volume, (float)_volume, FadeMs);
     }
 
+    /// <summary>Stops at once, e.g. when the stream has ended or failed anyway.</summary>
     public void Stop()
     {
         Generation++;
         FreeStream();
+    }
+
+    /// <summary>
+    /// Stops after a short fade-out (straight away if nothing is audible). It counts as stopped at
+    /// once: <see cref="IsLoaded"/> is false, and anything started meanwhile isn't affected.
+    /// </summary>
+    public async void FadeOutAndStop()
+    {
+        if (!IsPlaying)
+        {
+            Stop();
+            return;
+        }
+        var generation = ++Generation; // also tells callbacks from this stream that it's over
+        _fade++;
+        _stopping = true;
+        Bass.ChannelSlideAttribute(_stream, ChannelAttribute.Volume, 0, FadeMs);
+        await Task.Delay(FadeMs);
+        if (generation == Generation) FreeStream();
     }
 
     /// <summary>Position in seconds (for a live stream: time listened).</summary>
@@ -306,8 +385,7 @@ public sealed class AudioEngine : IDisposable
             {
                 if (_segments.Count == 0) return 0;
                 var current = _segments[0];
-                var bytes = current.DecoderStart + Math.Max(0, heard - current.OutputStart);
-                return Bass.ChannelBytes2Seconds(current.Decoder, bytes);
+                return current.StartSeconds + Bass.ChannelBytes2Seconds(_stream, Math.Max(0, heard - current.OutputStart));
             }
         }
         set
@@ -319,7 +397,8 @@ public sealed class AudioEngine : IDisposable
 
     /// <summary>
     /// Jumps within the track being heard. A user stream can't seek, so the output is rebuilt
-    /// (dropping whatever it had buffered) and the queued track is reopened from its start.
+    /// (dropping whatever it had buffered), in the track's own format if it was being converted, and
+    /// the queued track is reopened from its start.
     /// </summary>
     void Seek(double seconds)
     {
@@ -334,19 +413,27 @@ public sealed class AudioEngine : IDisposable
             foreach (var later in _segments.Skip(1))
             {
                 requeue ??= later.Path;
-                Bass.StreamFree(later.Decoder);
+                later.Free();
             }
             _segments.RemoveRange(1, _segments.Count - 1);
             if (_next is not null)
             {
                 requeue = _next.Path;
-                Bass.StreamFree(_next.Decoder);
+                _next.Free();
                 _next = null;
+            }
+
+            if (current.IsConverted)
+            {
+                Bass.StreamFree(current.Source);
+                current.Source = current.Decoder;
+                Bass.ChannelGetInfo(current.Decoder, out var info);
+                (_frequency, _channels) = (info.Frequency, info.Channels);
             }
 
             var target = Bass.ChannelSeconds2Bytes(current.Decoder, seconds);
             Bass.ChannelSetPosition(current.Decoder, target);
-            current.DecoderStart = Bass.ChannelGetPosition(current.Decoder);
+            current.StartSeconds = Bass.ChannelBytes2Seconds(current.Decoder, Bass.ChannelGetPosition(current.Decoder));
             current.OutputStart = 0;
             _written = 0;
             _drained = false;
@@ -375,7 +462,8 @@ public sealed class AudioEngine : IDisposable
         set
         {
             _volume = Math.Clamp(value, 0, 1);
-            if (_stream != 0) Bass.ChannelSetAttribute(_stream, ChannelAttribute.Volume, _volume);
+            // Not mid-fade or paused (the volume is faded to 0 then); Resume fades in to the new level.
+            if (IsPlaying) Bass.ChannelSetAttribute(_stream, ChannelAttribute.Volume, _volume);
         }
     }
 
@@ -437,18 +525,20 @@ public sealed class AudioEngine : IDisposable
         if (_stream != 0) Bass.StreamFree(_stream); // first, so the fill callback has stopped
         _stream = 0;
         IsLive = false;
+        _fade++;
+        _pausing = _stopping = false;
 
-        List<int> decoders;
+        List<Segment> segments;
         lock (_lock)
         {
-            decoders = _segments.Select(s => s.Decoder).ToList();
-            if (_next is not null) decoders.Add(_next.Decoder);
+            segments = [.. _segments];
+            if (_next is not null) segments.Add(_next);
             _segments.Clear();
             _next = null;
             _written = 0;
             _drained = false;
         }
-        foreach (var decoder in decoders) Bass.StreamFree(decoder);
+        foreach (var segment in segments) segment.Free();
     }
 
     public void Dispose()

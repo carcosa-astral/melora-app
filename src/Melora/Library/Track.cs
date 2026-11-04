@@ -49,6 +49,8 @@ public sealed class Track : ObservableObject
         }
     }
 
+    public override string ToString() => $"{Title}, {Artist}, {LengthText}";
+
     public static string FormatTime(TimeSpan t) =>
         t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
 }

@@ -10,6 +10,13 @@ public sealed class DiagnosticsTests : IDisposable
 
     public DiagnosticsTests() => Log.FilePath = Path.Combine(_dir, "melora.log");
 
+    /// <summary>The log, read while other tests may be writing to it.</summary>
+    static string ReadLog()
+    {
+        using var reader = new StreamReader(new FileStream(Log.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+        return reader.ReadToEnd();
+    }
+
     public void Dispose()
     {
         SqliteConnection.ClearAllPools();
@@ -21,7 +28,7 @@ public sealed class DiagnosticsTests : IDisposable
     {
         Log.Write("first");
         // Other tests running alongside may log too, so look for the line rather than the start of the file.
-        Assert.Matches(@"(?m)^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}  first\r?$", File.ReadAllText(Log.FilePath));
+        Assert.Matches(@"(?m)^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}  first\r?$", ReadLog());
 
         File.AppendAllText(Log.FilePath, new string('x', 1024 * 1024));
         Log.Write("after rollover");
@@ -29,8 +36,8 @@ public sealed class DiagnosticsTests : IDisposable
         var rolled = Assert.Single(Directory.GetFiles(_dir, "melora-*.log"));
         Assert.Matches(@"melora-\d{4}-\d{2}-\d{2}_\d{6}\.log$", rolled);
         Assert.Contains("first", File.ReadAllText(rolled));
-        Assert.DoesNotContain("first", File.ReadAllText(Log.FilePath));
-        Assert.Contains("after rollover", File.ReadAllText(Log.FilePath));
+        Assert.DoesNotContain("first", ReadLog());
+        Assert.Contains("after rollover", ReadLog());
     }
 
     [Fact]
@@ -64,7 +71,7 @@ public sealed class DiagnosticsTests : IDisposable
         await library.ScanAsync();
 
         Assert.EndsWith("Song.flac", Assert.Single(db.GetTracks(LibraryKind.Music)).StoredPath);
-        Assert.DoesNotContain("scan failed", File.ReadAllText(Log.FilePath));
+        Assert.DoesNotContain("scan failed", ReadLog());
     }
 
     [Fact]
@@ -101,7 +108,7 @@ public sealed class DiagnosticsTests : IDisposable
         library.AddFolder(music);
 
         Assert.False(await library.ScanAsync());
-        Assert.Contains("Music scan failed", File.ReadAllText(Log.FilePath));
+        Assert.Contains("Music scan failed", ReadLog());
     }
 
     [Fact]
@@ -120,7 +127,7 @@ public sealed class DiagnosticsTests : IDisposable
         await library.ScanAsync();
 
         Assert.Single(library.Load());
-        Assert.Contains("folder not found, keeping its tracks", File.ReadAllText(Log.FilePath));
+        Assert.Contains("folder not found, keeping its tracks", ReadLog());
     }
 }
 

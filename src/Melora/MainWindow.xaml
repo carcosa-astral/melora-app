@@ -187,7 +187,14 @@
                                Foreground="{StaticResource TextDimBrush}"
                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
-                <!-- The cover of the song playing, when one was found; covers the radio glyph. -->
+                <!-- The station's logo, when one was found; covers the radio glyph. -->
+                <Border x:Name="Logo" Width="36" Height="36" CornerRadius="18" HorizontalAlignment="Left"
+                        Visibility="Collapsed">
+                    <Border.Background>
+                        <ImageBrush ImageSource="{Binding Logo}" Stretch="UniformToFill" />
+                    </Border.Background>
+                </Border>
+                <!-- The cover of the song playing, when one was found; covers the logo. -->
                 <Border x:Name="Cover" Width="36" Height="36" CornerRadius="18" HorizontalAlignment="Left"
                         Visibility="Collapsed">
                     <Border.Background>
@@ -204,6 +211,9 @@
                 <DataTrigger Binding="{Binding IsPlaying}" Value="True">
                     <Setter TargetName="NameText" Property="Foreground" Value="{DynamicResource AccentBrush}" />
                     <Setter TargetName="Glyph" Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Logo, Converter={x:Static local:NotNullConverter.Instance}}" Value="True">
+                    <Setter TargetName="Logo" Property="Visibility" Value="Visible" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Art, Converter={x:Static local:NotNullConverter.Instance}}" Value="True">
                     <Setter TargetName="Cover" Property="Visibility" Value="Visible" />
@@ -233,8 +243,10 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal">
-                    <Button Style="{StaticResource IconButton}" Content="&#xE892;" ToolTip="Previous (Ctrl+Left)" Click="OnPrevious" />
-                    <Button Style="{StaticResource IconButton}" Click="OnPlayPause" Width="38" Height="38" FontSize="18">
+                    <Button Style="{StaticResource IconButton}" Content="&#xE892;" ToolTip="Previous (Ctrl+Left)" Click="OnPrevious"
+                            AutomationProperties.Name="Previous" />
+                    <Button Style="{StaticResource IconButton}" Click="OnPlayPause" Width="38" Height="38" FontSize="18"
+                            AutomationProperties.Name="{Binding PlayPauseLabel}">
                         <TextBlock>
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
@@ -258,10 +270,12 @@
                             </TextBlock.Style>
                         </TextBlock>
                     </Button>
-                    <Button Style="{StaticResource IconButton}" Content="&#xE893;" ToolTip="Next (Ctrl+Right)" Click="OnNext" />
+                    <Button Style="{StaticResource IconButton}" Content="&#xE893;" ToolTip="Next (Ctrl+Right)" Click="OnNext"
+                            AutomationProperties.Name="Next" />
                 </StackPanel>
 
                 <Slider x:Name="SeekBar" Grid.Column="1" Margin="18,0,14,0" Style="{StaticResource ThinSlider}"
+                        AutomationProperties.Name="Position" SmallChange="5" LargeChange="30" KeyUp="OnSeekKey"
                         Minimum="0" Maximum="{Binding Length}" Value="{Binding Position}" IsEnabled="{Binding CanSeek}"
                         PreviewMouseLeftButtonDown="OnSeekStart" PreviewMouseLeftButtonUp="OnSeekEnd" />
 
@@ -274,6 +288,7 @@
                             <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
                                 <Setter Property="Content" Value="&#xEB51;" />
                                 <Setter Property="ToolTip" Value="Love (Ctrl+L)" />
+                                <Setter Property="AutomationProperties.Name" Value="Love" />
                                 <Setter Property="Foreground" Value="{StaticResource TextFaintBrush}" />
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
@@ -283,13 +298,14 @@
                                     <DataTrigger Binding="{Binding IsLoved}" Value="True">
                                         <Setter Property="Content" Value="&#xEB52;" />
                                         <Setter Property="ToolTip" Value="Loved. Click to un-love (Ctrl+L)" />
+                                        <Setter Property="AutomationProperties.Name" Value="Loved, un-love" />
                                         <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Button.Style>
                     </Button>
-                    <ToggleButton IsChecked="{Binding Shuffle}" ToolTip="Shuffle">
+                    <ToggleButton IsChecked="{Binding Shuffle}" ToolTip="Shuffle" AutomationProperties.Name="Shuffle">
                         <ToggleButton.Style>
                             <Style TargetType="ToggleButton" BasedOn="{StaticResource IconButton}">
                                 <Setter Property="Content" Value="&#xE8B1;" />
@@ -302,7 +318,8 @@
                             </Style>
                         </ToggleButton.Style>
                     </ToggleButton>
-                    <Button Content="{Binding RepeatGlyph}" ToolTip="{Binding RepeatTip}" Click="OnRepeat">
+                    <Button Content="{Binding RepeatGlyph}" ToolTip="{Binding RepeatTip}" Click="OnRepeat"
+                            AutomationProperties.Name="{Binding RepeatTip}">
                         <Button.Style>
                             <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
                                 <Setter Property="Foreground" Value="{StaticResource TextFaintBrush}" />
@@ -317,10 +334,11 @@
                     <TextBlock Text="&#xE767;" FontFamily="{StaticResource IconFont}" FontSize="14"
                                Foreground="{StaticResource TextDimBrush}" VerticalAlignment="Center" Margin="12,0,8,0" />
                     <Slider Width="96" Style="{StaticResource ThinSlider}" Minimum="0" Maximum="100"
-                            Value="{Binding Volume}" ToolTip="Volume" />
+                            Value="{Binding Volume}" ToolTip="Volume" AutomationProperties.Name="Volume"
+                            SmallChange="5" LargeChange="10" />
                 </StackPanel>
 
-                <Button Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE713;" ToolTip="Settings"
+                <Button Grid.Column="4" Style="{StaticResource IconButton}" Content="&#xE713;" ToolTip="Settings" AutomationProperties.Name="Settings"
                         Margin="12,0,0,0" Click="OnSettings" />
             </Grid>
         </Border>
@@ -341,12 +359,24 @@
                                VerticalAlignment="Center"
                                Visibility="{Binding IsScanning, Converter={StaticResource BoolToVisibility}}" />
                     <Button Style="{StaticResource TextButton}" Padding="10,4" Margin="12,0,0,4" Click="OnAddStation"
+                            AutomationProperties.Name="Add station"
                             Visibility="{Binding ShowRadio, Converter={StaticResource BoolToVisibility}}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE710;" FontFamily="{StaticResource IconFont}" FontSize="11"
                                        VerticalAlignment="Center" Margin="0,0,6,0" />
                             <TextBlock Text="Add station" FontSize="12" />
                         </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource TextButton}" Padding="8,4" Margin="4,0,0,4" Click="OnStationsMenu"
+                            ToolTip="Export or import stations" AutomationProperties.Name="Export or import stations"
+                            Visibility="{Binding ShowRadio, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="&#xE712;" FontFamily="{StaticResource IconFont}" FontSize="12" VerticalAlignment="Center" />
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Export stations…" Click="OnExportStations" />
+                                <MenuItem Header="Import stations…" Click="OnImportStations" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
                     </Button>
                 </StackPanel>
             </DockPanel>
@@ -511,10 +541,9 @@
                                                     </Grid>
                                                     <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold"
                                                                VerticalAlignment="Center" />
-                                                    <TextBlock Text="{Binding ItemCount, StringFormat='{}{0}'}" FontSize="12"
-                                                               FontFamily="{StaticResource MonoFont}"
+                                                    <TextBlock Text="{Binding Items, Converter={x:Static local:DjSummaryConverter.Instance}}" FontSize="12"
                                                                Foreground="{StaticResource TextFaintBrush}"
-                                                               VerticalAlignment="Center" Margin="10,2,0,0" />
+                                                               VerticalAlignment="Center" Margin="12,2,0,0" />
                                                 </StackPanel>
                                                 <ItemsPresenter />
                                             </StackPanel>
@@ -562,6 +591,8 @@
                            Foreground="{StaticResource TextDimBrush}" HorizontalAlignment="Center" Margin="0,6,0,16" />
                 <Button Style="{StaticResource TextButton}" Content="Add station…" HorizontalAlignment="Center"
                         Click="OnAddStation" />
+                <Button Style="{StaticResource TextButton}" Content="Import stations…" HorizontalAlignment="Center"
+                        Margin="0,6,0,0" Click="OnImportStations" />
             </StackPanel>
         </Grid>
 

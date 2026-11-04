@@ -53,9 +53,9 @@
                 <CheckBox Content="Minimizing sends Melora to the system tray" IsChecked="{Binding MinimizeToTray}" />
                 <CheckBox Content="Tint Melora with colours from the playing album's art" IsChecked="{Binding AccentFromArt}"
                           Margin="0,10,0,0" />
-                <CheckBox Content="Find covers and DJ pictures that are missing" IsChecked="{Binding OnlineArtEnabled}" Margin="0,10,0,0" />
+                <CheckBox Content="Find missing covers, DJ pictures and station logos online" IsChecked="{Binding OnlineArtEnabled}" Margin="0,10,0,0" />
                 <TextBlock Style="{StaticResource Hint}" FontSize="12" Margin="28,4,0,0"
-                           Text="For albums and DJ folders without a picture: looked up on the Cover Art Archive, iTunes and Deezer, and kept in Melora's data folder. Your music files and folders are never changed." />
+                           Text="For albums and DJ folders without a picture, and for radio stations: looked up on the Cover Art Archive, iTunes, Deezer and Radio Browser, and kept in Melora's data folder. Your music files and folders are never changed." />
                 <CheckBox Content="Show covers for songs on the radio" IsChecked="{Binding RadioCovers}" Margin="0,10,0,0" />
                 <TextBlock Style="{StaticResource Hint}" FontSize="12" Margin="28,4,0,0"
                            Text="Looked up on iTunes and Deezer by artist and song name, as stations don't send pictures." />
@@ -182,6 +182,12 @@
                     <Hyperlink NavigateUri="https://github.com/carcosa-astral/melora-app/releases" RequestNavigate="OnLink"
                                Foreground="{DynamicResource AccentBrush}">All releases</Hyperlink>
                 </TextBlock>
+                <DockPanel Margin="0,14,0,0">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource TextButton}" Content="Open log" Padding="10,4"
+                            Click="OnOpenLog" />
+                    <TextBlock Style="{StaticResource Hint}" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"
+                               Text="Things that went wrong without showing: skipped files, refused scrobbles, stations that dropped." />
+                </DockPanel>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

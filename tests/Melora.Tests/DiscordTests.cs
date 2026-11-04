@@ -163,6 +163,45 @@ public class ArtistPhotoTests
     }
 }
 
+public class StationLogoTests
+{
+    /// <summary>Radio Browser: the address lookup knows only Groove Salad; the name search lists a few.</summary>
+    sealed class RadioBrowser : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancel)
+        {
+            var url = request.RequestUri!.ToString();
+            var body = url.Contains("/byurl?") && url.Contains("groovesalad")
+                ? """[{"name":"SomaFM Groove Salad","favicon":""},{"name":"SomaFM Groove Salad","favicon":"https://x/gs-exact.png"}]"""
+                : url.Contains("/byurl?") ? "[]"
+                : """[{"name":"Dance Hits Radio","favicon":"https://x/wrong.png"},{"name":"BBC Radio 1 Dance (128k)","favicon":"https://x/bbc.png"}]""";
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(body) });
+        }
+    }
+
+    [Fact]
+    public async Task Logo_ComesFromTheSameAddress_ElseTheMostVotedNameContainingTheStations()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"melora-logo-{Guid.NewGuid():N}.db");
+        try
+        {
+            var lookup = new CoverLookup(new HttpClient(new RadioBrowser()), new LibraryDb(path));
+            Assert.Equal("https://x/gs-exact.png",
+                await lookup.FindAsync(new CoverQuery("Groove Salad", null, null, null, "https://somafm.com/groovesalad256.pls")));
+            Assert.Equal("https://x/bbc.png",
+                await lookup.FindAsync(new CoverQuery("BBC Radio 1 Dance", null, null, null, "http://lstn.lv/bbcradio.m3u8")));
+            Assert.Null(await lookup.FindAsync(new CoverQuery("Nothing Like It", null, null, null, "http://nowhere/stream")));
+            Assert.StartsWith("station|", CoverLookup.Key(new CoverQuery("X", null, null, null, "http://a")));
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            foreach (var f in new[] { path, path + "-wal", path + "-shm" })
+                if (File.Exists(f)) File.Delete(f);
+        }
+    }
+}
+
 public class CoverPickTests
 {
     [Fact]

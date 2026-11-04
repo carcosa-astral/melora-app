@@ -317,6 +317,13 @@ public partial class MainWindow : Window
 
     void OnSeekStart(object sender, MouseButtonEventArgs e) => _vm.IsSeeking = true;
 
+    /// <summary>The seek bar moved with the keyboard (arrows 5 s, Page Up/Down 30 s, Home/End).</summary>
+    void OnSeekKey(object sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down or Key.PageUp or Key.PageDown or Key.Home or Key.End)
+            _vm.SeekTo(SeekBar.Value);
+    }
+
     void OnSeekEnd(object sender, MouseButtonEventArgs e)
     {
         _vm.SeekTo(SeekBar.Value);
@@ -359,6 +366,61 @@ public partial class MainWindow : Window
         var station = _vm.AddStation(dialog.StationName, dialog.StationUrl);
         StationList.SelectedItem = station;
         StationList.ScrollIntoView(station);
+    }
+
+    void OnStationsMenu(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { ContextMenu: { } menu } button) return;
+        menu.PlacementTarget = button;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    void OnExportStations(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export stations",
+            FileName = "Melora stations.m3u",
+            Filter = "Station list (*.m3u)|*.m3u",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            System.IO.File.WriteAllText(dialog.FileName, StationFile.Write(_vm.Stations.Select(s => (s.Name, s.Url))));
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            MessageDialog.Inform(this, "Stations not exported", ex.Message);
+        }
+    }
+
+    void OnImportStations(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Import stations",
+            Filter = "Station list (*.m3u, *.m3u8)|*.m3u;*.m3u8|All files|*.*",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        List<(string Name, string Url)> stations;
+        try
+        {
+            stations = StationFile.Read(System.IO.File.ReadAllText(dialog.FileName));
+        }
+        catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
+        {
+            MessageDialog.Inform(this, "Stations not imported", ex.Message);
+            return;
+        }
+
+        var added = _vm.ImportStations(stations);
+        var skipped = stations.Count - added;
+        MessageDialog.Inform(this, added == 0 ? "No new stations" : added == 1 ? "1 station added" : $"{added} stations added",
+            stations.Count == 0 ? "That file has no station addresses in it."
+            : skipped == 0 ? "They're in your Radio list now."
+            : $"Skipped {skipped} already in your list.");
     }
 
     void EditStation(Station station)
@@ -419,6 +481,8 @@ public partial class MainWindow : Window
             case Key.J when ctrl:
                 JumpToPlaying();
                 break;
+            case Key.Enter when Keyboard.FocusedElement is System.Windows.Controls.Primitives.ButtonBase:
+                return; // a button reached with Tab: Enter presses it
             case Key.Space when IsTyping:
                 TypeToJump(" "); // part of a name ("barry c"), not play/pause
                 break;
