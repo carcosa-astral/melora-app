@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- A file renamed only in upper/lower case (as Picard and Mp3tag do) and re-tagged was stored twice,
+  and the next scan then failed, so Melora said it couldn't start and closed. Such files are now
+  stored once, and a library already holding one twice is repaired by the next scan.
+- A scan that fails (a drive or network share dropping out mid-scan) no longer closes Melora, or ends
+  it without a word when the scan came from a folder change; it's written to the log and the
+  library stays as it was.
+
 ## [1.3.0] - 2026-10-24
 
 Pictures and getting around.

@@ -49,6 +49,62 @@ public sealed class DiagnosticsTests : IDisposable
     }
 
     [Fact]
+    public async Task CaseOnlyRename_ThenRetag_StaysOneTrack_AndScansAgain()
+    {
+        var music = Directory.CreateDirectory(Path.Combine(_dir, "Music")).FullName;
+        var db = new LibraryDb(Path.Combine(_dir, "melora.db"));
+        using var library = new LibraryService(db, LibraryKind.Music, () => []);
+        library.AddFolder(music);
+        File.WriteAllBytes(Path.Combine(music, "song.flac"), [1, 2, 3]);
+        await library.ScanAsync();
+
+        // What Picard or Mp3tag do: rename by case only, and write new tags.
+        File.Move(Path.Combine(music, "song.flac"), Path.Combine(music, "Song.flac"));
+        File.SetLastWriteTimeUtc(Path.Combine(music, "Song.flac"), DateTime.UtcNow.AddMinutes(5));
+        await library.ScanAsync();
+
+        Assert.EndsWith("Song.flac", Assert.Single(db.GetTracks(LibraryKind.Music)).StoredPath);
+        Assert.DoesNotContain("scan failed", File.ReadAllText(Log.FilePath));
+    }
+
+    [Fact]
+    public async Task FileStoredTwiceByAnOlderVersion_IsStoredOnceAfterAScan()
+    {
+        var music = Directory.CreateDirectory(Path.Combine(_dir, "Music")).FullName;
+        var db = new LibraryDb(Path.Combine(_dir, "melora.db"));
+        using var library = new LibraryService(db, LibraryKind.Music, () => []);
+        library.AddFolder(music);
+        var file = Path.Combine(music, "Song.flac");
+        File.WriteAllBytes(file, [1, 2, 3]);
+
+        using (var raw = new SqliteConnection($"Data Source={Path.Combine(_dir, "melora.db")}"))
+        {
+            raw.Open();
+            using var cmd = raw.CreateCommand();
+            cmd.CommandText = "INSERT INTO tracks (library, path, mtime) VALUES ('music', $a, 1), ('music', $b, 1)";
+            cmd.Parameters.AddWithValue("$a", AppPaths.ToStored(Path.Combine(music, "song.flac")));
+            cmd.Parameters.AddWithValue("$b", AppPaths.ToStored(file));
+            cmd.ExecuteNonQuery();
+        }
+
+        await library.ScanAsync();
+
+        Assert.Equal(AppPaths.ToStored(file), Assert.Single(db.GetTracks(LibraryKind.Music)).StoredPath);
+    }
+
+    [Fact]
+    public async Task ScanError_IsLogged_InsteadOfThrown()
+    {
+        var music = Directory.CreateDirectory(Path.Combine(_dir, "Music")).FullName;
+        var db = new LibraryDb(Path.Combine(_dir, "melora.db"));
+        using var library = new LibraryService(db, LibraryKind.Music, () => throw new IOException("The network name is no longer available."));
+        library.AddFolder(music);
+
+        Assert.False(await library.ScanAsync());
+        Assert.Contains("Music scan failed", File.ReadAllText(Log.FilePath));
+    }
+
+    [Fact]
     public async Task MissingFolder_KeepsItsTracks_AndIsLogged()
     {
         var music = Directory.CreateDirectory(Path.Combine(_dir, "Music")).FullName;

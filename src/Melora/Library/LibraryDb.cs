@@ -186,7 +186,10 @@ public sealed class LibraryDb
 
         using (var cmd = db.CreateCommand())
         {
+            // Windows paths ignore case but the UNIQUE index doesn't: drop the old spelling of a file
+            // renamed only in case (song.flac → Song.flac) so it isn't stored twice.
             cmd.CommandText = """
+                DELETE FROM tracks WHERE path = $path COLLATE NOCASE AND path <> $path;
                 INSERT INTO tracks (library, path, mtime, title, artist, album_artist, album, year, track_no, disc_no, duration_ms)
                 VALUES ($lib, $path, $mtime, $title, $artist, $albumArtist, $album, $year, $trackNo, $discNo, $duration)
                 ON CONFLICT (path) DO UPDATE SET

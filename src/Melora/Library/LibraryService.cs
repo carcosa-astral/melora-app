@@ -187,13 +187,20 @@ public sealed partial class LibraryService : IDisposable
             : System.IO.Path.GetFileName(root.TrimEnd('\\', '/'));
     }
 
-    /// <summary>Brings the database in line with the folders on disk. Returns true if anything changed.</summary>
+    /// <summary>Brings the database in line with the folders on disk. Returns true if anything changed. Never throws.</summary>
     public async Task<bool> ScanAsync()
     {
         await _scanLock.WaitAsync();
         try
         {
             return await Task.Run(Scan);
+        }
+        catch (Exception e)
+        {
+            // A drive or share dropping out mid-scan mustn't close Melora (or, from the folder
+            // watcher's thread, end it outright); the library stays as it was until the next scan.
+            Log.Write($"{_kind} scan failed, library left as it was: {e}");
+            return false;
         }
         finally
         {
@@ -203,7 +210,11 @@ public sealed partial class LibraryService : IDisposable
 
     bool Scan()
     {
-        var known = _db.GetTracks(_kind).ToDictionary(t => t.StoredPath, t => t.Mtime, StringComparer.OrdinalIgnoreCase);
+        // A database from before case-only renames were handled can hold one file twice; reading it
+        // again saves it once (SaveScan drops the other spelling).
+        var known = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in _db.GetTracks(_kind))
+            if (!known.TryAdd(t.StoredPath, t.Mtime)) known[t.StoredPath] = -1;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var upserts = new List<TrackRow>();
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
