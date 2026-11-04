@@ -73,12 +73,13 @@ public sealed class AudioEngine : IDisposable
         _fill = Fill;
     }
 
-    public void Initialize()
+    /// <param name="device">-1 for Windows' default output; tests pass 0, BASS's "no sound" device.</param>
+    public void Initialize(int device = -1)
     {
         // Must be set before Init; with it, device -1 means "whatever Windows' default is right now".
         Bass.Configure(FollowDefaultDevice, true);
 
-        if (!Bass.Init())
+        if (!Bass.Init(device))
             throw new InvalidOperationException($"Could not start audio output ({Bass.LastError}).");
 
         foreach (var plugin in Plugins)

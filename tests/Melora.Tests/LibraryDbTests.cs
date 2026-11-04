@@ -59,3 +59,32 @@ public sealed class LibraryDbTests : IDisposable
         Assert.Single(db.GetFolders(LibraryKind.Mixes));
     }
 }
+
+public class AppPathsTests
+{
+    [Theory]
+    [InlineData(@"C:\Users\me\Music\a.flac", @"\Users\me\Music\a.flac")]   // same drive, outside Melora
+    [InlineData(@"C:\_Apps\Melora\Music\a.flac", @"Music\a.flac")]        // inside Melora's folder
+    [InlineData(@"D:\media\music\a.flac", @"D:\media\music\a.flac")]       // another drive
+    public void Stored_AndBackAgain(string full, string stored)
+    {
+        Assert.Equal(stored, AppPaths.ToStored(full, @"C:\_Apps\Melora\"));
+        Assert.Equal(full, AppPaths.FromStored(stored, @"C:\_Apps\Melora\"));
+    }
+
+    [Fact]
+    public void MovingMelora_KeepsMusicElsewhereOnItsDrive_AndUnderIt()
+    {
+        var outside = AppPaths.ToStored(@"C:\Users\me\Music\a.flac", @"C:\_Apps\Melora\");
+        var inside = AppPaths.ToStored(@"C:\_Apps\Melora\Music\a.flac", @"C:\_Apps\Melora\");
+
+        // Moved deeper, and onto a USB stick that came up as E:.
+        Assert.Equal(@"C:\Users\me\Music\a.flac", AppPaths.FromStored(outside, @"C:\Apps\Portable\Melora\"));
+        Assert.Equal(@"E:\Users\me\Music\a.flac", AppPaths.FromStored(outside, @"E:\Melora\"));
+        Assert.Equal(@"C:\Apps\Portable\Melora\Music\a.flac", AppPaths.FromStored(inside, @"C:\Apps\Portable\Melora\"));
+    }
+
+    [Fact]
+    public void OlderRelativePaths_StillResolve() =>
+        Assert.Equal(@"C:\Users\me\Music\a.flac", AppPaths.FromStored(@"..\..\Users\me\Music\a.flac", @"C:\_Apps\Melora\"));
+}

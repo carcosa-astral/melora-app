@@ -371,8 +371,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set
         {
             _engine.Volume = value / 100;
-            OnPropertyChanged();
-            _db.SetSetting("volume", _engine.Volume.ToString(CultureInfo.InvariantCulture));
+            OnPropertyChanged(); // saved on closing, not on every step of a slider drag
         }
     }
 
@@ -829,6 +828,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        _db.SetSetting("volume", _engine.Volume.ToString(CultureInfo.InvariantCulture));
         _timer.Stop();
         Discord.Dispose();
         Scrobbler.Dispose();

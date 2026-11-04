@@ -5,6 +5,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- Moving the Melora folder to a different depth on the same drive (say from `C:\_Apps\Melora` to
+  `C:\Apps\Portable\Melora`) no longer loses music stored elsewhere on that drive. Paths outside
+  Melora's folder are now kept from the drive's root, without the drive letter; files inside it are
+  still kept relative, so they move with it. Libraries on Melora's own drive are re-read once.
+
+### Changed
+- The volume is saved when Melora closes, rather than on every step of dragging the slider.
+- The gapless hand-over and seeking now have automated tests, run on BASS's silent output device.
+
 ## [1.3.1] - 2026-11-04
 
 ### Fixed

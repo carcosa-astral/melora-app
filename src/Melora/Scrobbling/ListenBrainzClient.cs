@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
 using Melora.Library;
@@ -12,9 +11,6 @@ namespace Melora.Scrobbling;
 public sealed class ListenBrainzClient : IScrobbleService
 {
     const string Api = "https://api.listenbrainz.org/1/";
-
-    static readonly string Version =
-        Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0";
 
     readonly HttpClient _http;
     readonly LibraryDb _db;
@@ -154,7 +150,7 @@ public sealed class ListenBrainzClient : IScrobbleService
             {
                 ["media_player"] = "Melora",
                 ["submission_client"] = "Melora",
-                ["submission_client_version"] = Version,
+                ["submission_client_version"] = UpdateCheck.CurrentVersion,
             };
             if (play.Duration > TimeSpan.Zero) info["duration_ms"] = (long)play.Duration.TotalMilliseconds;
             if (play.TrackNo > 0) info["tracknumber"] = play.TrackNo;

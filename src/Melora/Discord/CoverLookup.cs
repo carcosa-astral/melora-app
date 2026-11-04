@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Net.Http;
-using System.Reflection;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -33,8 +32,7 @@ public sealed partial class CoverLookup(HttpClient http, LibraryDb db)
     public static CoverLookup Create(LibraryDb db)
     {
         var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd($"Melora/{version}");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd($"Melora/{UpdateCheck.CurrentVersion}");
         return new CoverLookup(http, db);
     }
 

@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Net.Http;
-using System.Reflection;
 using System.Windows.Threading;
 using Melora.Library;
 
@@ -35,8 +34,7 @@ public sealed class Scrobbler : ObservableObject, IDisposable
     {
         _db = db;
         var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-        var version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3);
-        http.DefaultRequestHeaders.UserAgent.ParseAdd($"Melora/{version}");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd($"Melora/{UpdateCheck.CurrentVersion}");
 
         LastFm = new LastFmClient(http, db);
         ListenBrainz = new ListenBrainzClient(http, db);
