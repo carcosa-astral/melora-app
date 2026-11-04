@@ -14,7 +14,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Melora</RootNamespace>
     <AssemblyName>Melora</AssemblyName>
-    <Version>1.3.1</Version>
+    <Version>1.3.2</Version>
     <Product>Melora</Product>
     <PlatformTarget>x64</PlatformTarget>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
