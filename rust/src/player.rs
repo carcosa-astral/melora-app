@@ -242,7 +242,7 @@ impl Player {
         }
         self.engine.stop();
         self.set_playing(ui, None);
-        ui.set_track_detail("Melora can't play the rest of the list".into());
+        ui.set_now_playing("Melora can't play the rest of the list".into());
     }
 
     /// Lines up the following track so it starts without a gap. One that can't be opened is
@@ -344,53 +344,55 @@ impl Player {
     fn set_playing(&mut self, ui: &AppWindow, playing: Option<(usize, usize)>) {
         self.playing = playing;
         self.refresh_view(ui);
-        let Some((v, i)) = playing else {
-            ui.set_track_title("Nothing playing".into());
-            ui.set_track_detail("".into());
-            self.show_state(ui);
-            return;
+        // The status bar and the window title say what's playing, as in 2.x.
+        let now = match playing {
+            None => String::new(),
+            Some((RADIO, i)) => {
+                // Radio: the song the station says it's playing, else its name and how it's going.
+                let name = self.stations.get(i).map_or("", |s| s.name.as_str());
+                match (&self.station_now, self.engine.is_live()) {
+                    (Some(song), true) => song.clone(),
+                    (Some(status), false) => format!("{name}  ·  {status}"),
+                    (None, _) => name.to_string(),
+                }
+            }
+            Some((v, i)) => {
+                let t = &self.views[v].lib.tracks[i];
+                format!("{} – {}", t.artist, t.title)
+            }
         };
-        if v == RADIO {
-            // Radio: the station's name, and what it says is playing (or how it's going).
-            let format = self
-                .engine
-                .is_live()
-                .then(|| self.engine.format())
-                .flatten()
-                .map(|(codec, freq, _)| format!("{codec}  ·  {:.1} kHz", f64::from(freq) / 1000.0));
-            let parts: Vec<String> = [self.station_now.clone(), format]
-                .into_iter()
-                .flatten()
-                .collect();
-            ui.set_track_title(self.stations.get(i).map_or("", |s| s.name.as_str()).into());
-            ui.set_track_detail(parts.join("  ·  ").into());
-            ui.set_length(0.0);
-            self.show_state(ui);
-            return;
-        }
-        let view = &self.views[v];
-        let t = &view.lib.tracks[i];
-        // Music: artist and album. Mixes: artist and the DJ they're filed under.
-        let from = if view.kind == Kind::Mixes {
-            &t.collection
-        } else {
-            &view.lib.albums[t.album].title
-        };
-        let format = self.engine.format().map(|(codec, freq, chans)| {
-            let layout = match chans {
-                1 => "mono".to_string(),
-                2 => "stereo".to_string(),
-                n => format!("{n} channels"),
-            };
-            format!(
-                "  ·  {codec}  ·  {:.1} kHz  ·  {layout}",
-                f64::from(freq) / 1000.0
-            )
-        });
-        ui.set_track_title(t.title.as_str().into());
-        ui.set_track_detail(
-            format!("{}  ·  {from}{}", t.artist, format.unwrap_or_default()).into(),
+        let format = self
+            .engine
+            .format()
+            .filter(|_| self.engine.is_loaded())
+            .map(|(codec, freq, chans, kbps)| {
+                let layout = match chans {
+                    1 => "mono".to_string(),
+                    2 => "stereo".to_string(),
+                    n => format!("{n} ch"),
+                };
+                let parts = [
+                    (!codec.is_empty()).then(|| codec.to_string()),
+                    (freq > 0).then(|| format!("{} kHz", f64::from(freq) / 1000.0)),
+                    (kbps > 0).then(|| format!("{kbps} kbps")),
+                    Some(layout),
+                ];
+                parts
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+                    .join("  ·  ")
+            });
+        ui.set_window_title(
+            if now.is_empty() {
+                "Melora".to_string()
+            } else {
+                format!("{now}  ·  Melora")
+            }
+            .into(),
         );
+        ui.set_now_playing(now.into());
+        ui.set_format_text(format.unwrap_or_default().into());
         ui.set_length(self.engine.length() as f32);
         self.show_state(ui);
     }
@@ -399,6 +401,7 @@ impl Player {
         let len = self.engine.length();
         ui.set_loaded(self.engine.is_loaded());
         ui.set_playing(self.engine.is_playing());
+        ui.set_live(self.engine.is_live());
         // While the seek bar is dragged it leads, and the time shows where it would land.
         let pos = if ui.get_seeking() {
             f64::from(ui.get_position())
@@ -407,10 +410,11 @@ impl Player {
             ui.set_position(pos as f32);
             pos
         };
-        let time = if self.engine.is_loaded() {
-            format!("{} / {}", rows::clock(pos), rows::clock(len))
-        } else {
-            String::new()
+        // Radio has no length: just the time listened.
+        let time = match (self.engine.is_loaded(), self.engine.is_live()) {
+            (true, false) => format!("{} / {}", rows::clock(pos), rows::clock(len)),
+            (true, true) => rows::clock(pos),
+            (false, _) => String::new(),
         };
         ui.set_time_text(time.into());
     }

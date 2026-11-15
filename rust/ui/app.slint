@@ -1,8 +1,10 @@
-// Melora 3.0: the music library, played without gaps. Nord colours, IBM Plex Sans.
+// Melora 3.0's window, laid out as 2.x's: the transport bar, the library tabs, the list, and a
+// status bar with what's playing. Nord colours, IBM Plex Sans and Mono.
 import "fonts/IBMPlexSans-Regular.ttf";
 import "fonts/IBMPlexSans-SemiBold.ttf";
+import "fonts/IBMPlexMono-Regular.ttf";
 import { Theme } from "theme.slint";
-import { IconButton, TabButton, ThinSlider } from "controls.slint";
+import { IconButton, TabButton, TextButton, ThinSlider } from "controls.slint";
 import { Row, TrackList } from "track_list.slint";
 import { Button } from "std-widgets.slint";
 import { ConfirmPanel, MenuItem, StationEditor } from "dialogs.slint";
@@ -10,19 +12,24 @@ import { ConfirmPanel, MenuItem, StationEditor } from "dialogs.slint";
 export { Row }
 
 export component AppWindow inherits Window {
-    title: "Melora";
-    preferred-width: 820px;
-    preferred-height: 640px;
-    min-width: 420px;
+    title: window-title;
+    preferred-width: 1000px;
+    preferred-height: 720px;
+    min-width: 480px;
     min-height: 320px;
     background: Theme.background;
     default-font-family: "IBM Plex Sans";
     default-font-size: 13px;
 
-    in property <string> track-title: "Nothing playing";
-    in property <string> track-detail;
+    // "Artist – Title · Melora", or "Melora".
+    in property <string> window-title: "Melora";
+    // The status bar: what's playing ("Artist – Title"), and its format ("FLAC · 44.1 kHz · …").
+    in property <string> now-playing;
+    in property <string> format-text;
     in property <bool> playing;
     in property <bool> loaded;
+    // A radio station is on: Play becomes Stop, and there's nothing to seek.
+    in property <bool> live;
     in property <float> length;
     in-out property <float> position;
     in property <string> time-text;
@@ -35,7 +42,7 @@ export component AppWindow inherits Window {
     out property <length> list-view-height: list.view-height;
     // "1,234 tracks · 3d 4h", or what a scan is doing.
     in property <string> summary;
-    // 0 Music, 1 Mixes.
+    // 0 Music, 1 Mixes, 2 Radio.
     in property <int> tab;
     in property <bool> shuffle;
     // 0 off, 1 all, 2 one.
@@ -105,110 +112,106 @@ export component AppWindow inherits Window {
         }
 
         VerticalLayout {
-            VerticalLayout {
-                padding: 20px;
-                padding-bottom: 12px;
-                spacing: 4px;
-                Text {
-                    text: track-title;
-                    font-size: 20px;
-                    font-weight: 600;
-                    color: Theme.text;
-                    overflow: elide;
-                }
-                Text {
-                    text: track-detail;
-                    color: Theme.dim;
-                    overflow: elide;
-                }
-            }
-
-            HorizontalLayout {
-                padding-left: 14px;
-                padding-right: 20px;
-                padding-bottom: 12px;
-                spacing: 4px;
-                IconButton {
-                    glyph: "\u{E892}";
-                    label: "Previous";
-                    enabled: loaded;
-                    clicked => { previous(); }
-                }
-                IconButton {
-                    glyph: playing ? "\u{E769}" : "\u{E768}";
-                    label: playing ? "Pause" : "Play";
-                    size: 44px;
-                    clicked => { toggle-play(); }
-                }
-                IconButton {
-                    glyph: "\u{E893}";
-                    label: "Next";
-                    enabled: loaded;
-                    clicked => { next(); }
-                }
-                seek-bar := ThinSlider {
-                    enabled: loaded;
-                    maximum: max(length, 1);
-                    value <=> position;
-                    small-step: 5;
-                    large-step: 30;
-                    label: "Position";
-                    committed(v) => { seek(v); }
-                }
-                Text {
-                    text: time-text;
-                    color: Theme.dim;
-                    vertical-alignment: center;
-                    horizontal-alignment: right;
-                    min-width: 96px;
-                }
-                Rectangle { width: 8px; }
-                IconButton {
-                    glyph: "\u{E8B1}";
-                    label: shuffle ? "Shuffle, on" : "Shuffle, off";
-                    active: shuffle;
-                    size: 36px;
-                    clicked => { toggle-shuffle(); }
-                }
-                IconButton {
-                    glyph: repeat == 2 ? "\u{E8ED}" : "\u{E8EE}";
-                    label: repeat == 0 ? "Repeat, off" : repeat == 1 ? "Repeat all" : "Repeat one";
-                    active: repeat != 0;
-                    size: 36px;
-                    clicked => { cycle-repeat(); }
-                }
-                Text {
-                    text: volume == 0 ? "\u{E74F}" : "\u{E767}";
-                    font-family: "Segoe Fluent Icons";
-                    font-size: 15px;
-                    color: Theme.dim;
-                    vertical-alignment: center;
-                    accessible-role: none;
-                }
-                ThinSlider {
-                    width: 96px;
-                    horizontal-stretch: 0;
-                    maximum: 100;
-                    value <=> volume;
-                    small-step: 5;
-                    large-step: 20;
-                    label: "Volume";
-                }
-            }
-
+            // ===== Transport =====
             Rectangle {
-                height: 1px;
-                background: Theme.divider;
+                background: Theme.bar;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    spacing: 2px;
+                    IconButton {
+                        glyph: "\u{E892}";
+                        label: "Previous";
+                        size: 34px;
+                        enabled: loaded && !live;
+                        clicked => { previous(); }
+                    }
+                    IconButton {
+                        glyph: !playing ? "\u{E768}" : live ? "\u{E71A}" : "\u{E769}";
+                        label: !playing ? "Play" : live ? "Stop" : "Pause";
+                        size: 38px;
+                        glyph-size: 18px;
+                        clicked => { toggle-play(); }
+                    }
+                    IconButton {
+                        glyph: "\u{E893}";
+                        label: "Next";
+                        size: 34px;
+                        enabled: loaded && !live;
+                        clicked => { next(); }
+                    }
+                    Rectangle { width: 14px; }
+                    seek-bar := ThinSlider {
+                        enabled: loaded && !live && length > 0;
+                        maximum: max(length, 1);
+                        value <=> position;
+                        small-step: 5;
+                        large-step: 30;
+                        label: "Position";
+                        committed(v) => { seek(v); }
+                    }
+                    Rectangle { width: 12px; }
+                    Text {
+                        text: time-text;
+                        font-family: "IBM Plex Mono";
+                        font-size: 12px;
+                        color: Theme.dim;
+                        vertical-alignment: center;
+                    }
+                    Rectangle { width: 12px; }
+                    IconButton {
+                        glyph: "\u{E8B1}";
+                        label: shuffle ? "Shuffle, on" : "Shuffle, off";
+                        active: shuffle;
+                        muted: true;
+                        size: 34px;
+                        clicked => { toggle-shuffle(); }
+                    }
+                    IconButton {
+                        glyph: repeat == 2 ? "\u{E8ED}" : "\u{E8EE}";
+                        label: repeat == 0 ? "Repeat, off" : repeat == 1 ? "Repeat all" : "Repeat one";
+                        active: repeat != 0;
+                        muted: true;
+                        size: 34px;
+                        clicked => { cycle-repeat(); }
+                    }
+                    Rectangle { width: 10px; }
+                    Text {
+                        text: volume == 0 ? "\u{E74F}" : "\u{E767}";
+                        font-family: "Segoe Fluent Icons";
+                        font-size: 14px;
+                        color: Theme.dim;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+                    Rectangle { width: 8px; }
+                    ThinSlider {
+                        width: 96px;
+                        horizontal-stretch: 0;
+                        maximum: 100;
+                        value <=> volume;
+                        small-step: 5;
+                        large-step: 10;
+                        label: "Volume";
+                    }
+                }
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: Theme.divider;
+                }
             }
 
+            // ===== Library tabs =====
             HorizontalLayout {
                 padding-left: 20px;
-                padding-right: 14px;
-                padding-top: 8px;
-                padding-bottom: 8px;
+                padding-right: 16px;
+                padding-top: 4px;
                 spacing: 12px;
                 HorizontalLayout {
-                    spacing: 4px;
+                    spacing: 6px;
                     accessible-role: tab-list;
                     TabButton {
                         text: "Music";
@@ -226,35 +229,23 @@ export component AppWindow inherits Window {
                         clicked => { show-tab(2); }
                     }
                 }
-                Text {
-                    text: summary;
-                    color: Theme.dim;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                    overflow: elide;
-                }
-                if tab != 2: IconButton {
-                    glyph: "\u{E8F4}";
-                    label: tab == 0 ? "Add music folder" : "Add mixes folder";
-                    size: 36px;
+                Rectangle { horizontal-stretch: 1; }
+                if tab != 2: TextButton {
+                    glyph: "\u{E710}";
+                    text: tab == 0 ? "Add music folder" : "Add mixes folder";
                     clicked => { add-folder(); }
                 }
-                if tab == 2: IconButton {
+                if tab == 2: TextButton {
                     glyph: "\u{E710}";
-                    label: "Add station";
-                    size: 36px;
+                    text: "Add station";
                     clicked => { add-station(); }
                 }
-                if tab == 2: more := IconButton {
+                if tab == 2: TextButton {
                     glyph: "\u{E712}";
                     label: "More: import or export stations";
-                    size: 36px;
-                    clicked => {
-                        stations-menu.show();
-                    }
+                    clicked => { stations-menu.show(); }
                 }
             }
-
             Rectangle {
                 height: 1px;
                 background: Theme.divider;
@@ -262,30 +253,33 @@ export component AppWindow inherits Window {
 
             if row-count == 0: VerticalLayout {
                 alignment: center;
-                spacing: 8px;
+                spacing: 6px;
                 Text {
                     text: tab == 0 ? "No music yet" : tab == 1 ? "No mixes yet" : "No stations yet";
-                    font-size: 15px;
-                    font-weight: 600;
+                    font-size: 16px;
                     color: Theme.text;
                     horizontal-alignment: center;
                 }
                 Text {
-                    text: tab == 0 ? "Add a folder with the button at the top right."
-                        : tab == 1 ? "Add the folder where you keep DJ sets and mixes, with the button at the top right."
+                    text: tab == 0 ? "Point Melora at the folder where you keep your music."
+                        : tab == 1 ? "Point Melora at the folder where you keep DJ sets and mixes."
                         : "Paste a stream address and give it a name before you tune in.";
                     color: Theme.dim;
                     horizontal-alignment: center;
                 }
-                if tab == 2: HorizontalLayout {
+                HorizontalLayout {
                     alignment: center;
                     spacing: 8px;
-                    padding-top: 8px;
-                    Button {
+                    padding-top: 10px;
+                    if tab != 2: Button {
+                        text: tab == 0 ? "Add music folder…" : "Add mixes folder…";
+                        clicked => { add-folder(); }
+                    }
+                    if tab == 2: Button {
                         text: "Add station…";
                         clicked => { add-station(); }
                     }
-                    Button {
+                    if tab == 2: Button {
                         text: "Import stations…";
                         clicked => { import-stations(); }
                     }
@@ -310,6 +304,42 @@ export component AppWindow inherits Window {
                     menu-x = x;
                     menu-y = y;
                     station-menu.show();
+                }
+            }
+
+            // ===== Status bar =====
+            Rectangle {
+                background: Theme.bar;
+                Rectangle {
+                    y: 0;
+                    height: 1px;
+                    background: Theme.divider;
+                }
+                HorizontalLayout {
+                    padding-left: 20px;
+                    padding-right: 20px;
+                    padding-top: 7px;
+                    padding-bottom: 7px;
+                    spacing: 16px;
+                    Text {
+                        text: now-playing == "" ? "Nothing playing" : now-playing;
+                        font-size: 12px;
+                        color: now-playing == "" ? Theme.dim : Theme.text;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                    Text {
+                        text: format-text;
+                        font-family: "IBM Plex Mono";
+                        font-size: 11.5px;
+                        color: Theme.dim;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: summary;
+                        font-size: 12px;
+                        color: Theme.dim;
+                    }
                 }
             }
         }
@@ -345,7 +375,7 @@ export component AppWindow inherits Window {
     // The ⋯ button next to Add station.
     stations-menu := PopupWindow {
         x: root.width - 200px;
-        y: 150px;
+        y: 96px;
         Rectangle {
             background: Theme.panel;
             border-color: Theme.divider;

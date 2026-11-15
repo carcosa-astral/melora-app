@@ -350,14 +350,35 @@ impl Engine {
     }
 
     /// Codec, sample rate and channels of the track being heard (its own, not the output's).
-    pub fn format(&self) -> Option<(&'static str, u32, u32)> {
-        let handle = if self.is_live() {
-            self.stream
+    /// Codec, sample rate, channels and bitrate (kbps, 0 if unknown) of what's being heard.
+    pub fn format(&self) -> Option<(&'static str, u32, u32, u32)> {
+        let (handle, path) = if self.is_live() {
+            (self.stream, None)
         } else {
-            lock(&self.feed).segments.first()?.decoder
+            let f = lock(&self.feed);
+            let s = f.segments.first()?;
+            (s.decoder, Some(s.path.clone()))
         };
         let (freq, chans, ctype) = bass::info(handle);
-        Some((bass::codec_name(ctype), freq, chans))
+        let mut kbps = bass::bitrate(handle);
+        if kbps == 0 && self.is_live() {
+            // Radio servers advertise their bitrate in the icy-br header.
+            let mut headers = bass::tags(handle, bass::TAGS_ICY);
+            headers.extend(bass::tags(handle, bass::TAGS_HTTP));
+            kbps = radio::header_value(headers.iter().map(String::as_str), "icy-br")
+                .and_then(|b| b.split(',').next().and_then(|n| n.trim().parse().ok()))
+                .unwrap_or(0);
+        } else if kbps == 0 {
+            // BASSOPUS doesn't report one: use the file's average, as 2.x does.
+            let len = self.length();
+            let size = path
+                .and_then(|p| std::fs::metadata(p).ok())
+                .map_or(0, |m| m.len());
+            if len > 0.0 {
+                kbps = (size as f64 * 8.0 / len / 1000.0).round() as u32;
+            }
+        }
+        Some((bass::codec_name(ctype), freq, chans, kbps))
     }
 
     /// Volume from 0 to 1, kept across tracks.

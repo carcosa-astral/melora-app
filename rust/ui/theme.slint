@@ -1,12 +1,15 @@
 // Nord, deepened for contrast; solid colours only (no transparency, no Mica, no tint from covers).
-// Contrast on the background: text 13.7:1, dim 9.4:1, accent 7.9:1, error 5.1:1, ok 7.7:1.
+// Contrast on the background: text 13.7:1, dim 9.4:1, faint 5.1:1, accent 7.9:1, error 5.1:1,
+// ok 7.7:1 (on the bars: text 12.3:1, dim 8.5:1, faint 4.6:1).
 export global Theme {
     out property <color> background: #1F232A; // deep polar night
+    out property <color> bar: #262B33;        // the transport and status bars
     out property <color> panel: #2E3440;      // nord0: hover, raised areas
     out property <color> divider: #3B4252;    // nord1
     out property <color> track: #434C5E;      // nord2: empty part of a slider
     out property <color> text: #ECEFF4;       // nord6
     out property <color> dim: #C0C8D6;
+    out property <color> faint: #8A93A5;      // switches that are off
     out property <color> accent: #88C0D0;     // nord8, frost
     out property <color> error: #D57780;      // nord11, lightened to stay readable
     out property <color> ok: #A3BE8C;         // nord14

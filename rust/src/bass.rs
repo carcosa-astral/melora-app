@@ -24,6 +24,7 @@ pub const TAGS_HTTP: u32 = 3;
 pub const TAGS_ICY: u32 = 4;
 pub const TAGS_META: u32 = 5;
 const ATTRIB_VOL: u32 = 2;
+const ATTRIB_BITRATE: u32 = 12;
 const POS_BYTE: u32 = 0;
 const ERROR_ALREADY: i32 = 14;
 const ACTIVE_PLAYING: u32 = 1;
@@ -74,6 +75,7 @@ unsafe extern "system" {
     fn BASS_ChannelBytes2Seconds(handle: Handle, pos: u64) -> f64;
     fn BASS_ChannelSeconds2Bytes(handle: Handle, secs: f64) -> u64;
     fn BASS_ChannelSetAttribute(handle: Handle, attrib: u32, value: f32) -> i32;
+    fn BASS_ChannelGetAttribute(handle: Handle, attrib: u32, value: *mut f32) -> i32;
     fn BASS_ChannelSlideAttribute(handle: Handle, attrib: u32, value: f32, time: u32) -> i32;
     fn BASS_ChannelGetData(handle: Handle, buffer: *mut c_void, length: u32) -> u32;
     fn BASS_StreamCreateURL(
@@ -302,6 +304,14 @@ pub fn tags(h: Handle, kind: u32) -> Vec<String> {
         }
         out
     }
+}
+
+/// The bitrate BASS reports for a channel, in kbps; 0 when it doesn't know.
+pub fn bitrate(h: Handle) -> u32 {
+    let mut kbps = 0.0f32;
+    // SAFETY: BASS writes one float to the pointer we pass.
+    unsafe { BASS_ChannelGetAttribute(h, ATTRIB_BITRATE, &mut kbps) };
+    kbps.round().max(0.0) as u32
 }
 
 /// A short codec name for BASS's channel type.

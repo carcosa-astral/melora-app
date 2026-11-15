@@ -164,7 +164,7 @@ fn main() -> Result<(), slint::PlatformError> {
     }));
 
     if let Err(e) = bass::init(-1, &paths::base_dir()) {
-        ui.set_track_detail(format!("Sound couldn't start: {e}").into());
+        ui.set_now_playing(format!("Sound couldn't start: {e}").into());
     }
 
     player.borrow().show_settings(&ui);
