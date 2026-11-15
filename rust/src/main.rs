@@ -107,6 +107,33 @@ fn watch_folders(db: &Db, ui: &AppWindow) -> Option<watch::Watch> {
     }))
 }
 
+/// The worker that finds station logos online, reporting back to the window.
+fn logo_loader(ui: &AppWindow, db_file: &Path, base: &str) -> logos::Loader {
+    let weak = ui.as_weak();
+    logos::Loader::new(db_file.to_path_buf(), base.to_string(), move || {
+        let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_logos_ready());
+    })
+}
+
+/// Fills in the Settings panel's folder lists.
+fn show_folders(ui: &AppWindow, db: &Db) {
+    for (kind, set) in [
+        (
+            Kind::Music,
+            AppWindow::set_music_folders as fn(&AppWindow, _),
+        ),
+        (Kind::Mixes, AppWindow::set_mixes_folders),
+    ] {
+        let folders: Vec<slint::SharedString> = db
+            .folders(kind)
+            .unwrap_or_default()
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        set(ui, slint::ModelRc::new(slint::VecModel::from(folders)));
+    }
+}
+
 fn main() -> Result<(), slint::PlatformError> {
     let base = paths::base_dir().to_string_lossy().into_owned();
     let db_file = paths::data_dir().join("melora.db");
@@ -127,6 +154,7 @@ fn main() -> Result<(), slint::PlatformError> {
         .clamp(0.0, 1.0);
     // Minimizing hides Melora to the tray, as in 2.x (unless that's been turned off there).
     let to_tray = setting("minimizeToTray").as_deref() != Some("0");
+    let online = setting("onlineArt").as_deref() != Some("0");
 
     let mut engine = Engine::new();
     engine.set_volume(volume);
@@ -158,12 +186,8 @@ fn main() -> Result<(), slint::PlatformError> {
         logos: HashMap::new(),
         logos_pending: HashSet::new(),
         // Online lookups follow 2.x's "Find missing covers, DJ pictures and station logos online".
-        logo_loader: (setting("onlineArt").as_deref() != Some("0")).then(|| {
-            let weak = ui.as_weak();
-            logos::Loader::new(db_file.clone(), base.clone(), move || {
-                let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_logos_ready());
-            })
-        }),
+        logo_loader: online.then(|| logo_loader(&ui, &db_file, &base)),
+        minimize_to_tray: to_tray,
         // Tray clicks and menu choices arrive off to the side; hand them to the window's thread.
         tray: tray::Tray::new({
             let weak = ui.as_weak();
@@ -267,12 +291,35 @@ fn main() -> Result<(), slint::PlatformError> {
             None => {}
         }
     });
+    let (weak, p) = (ui.as_weak(), player.clone());
+    ui.on_open_settings(move || {
+        let (Some(ui), Ok(p)) = (weak.upgrade(), p.try_borrow()) else {
+            return;
+        };
+        if let Some(db) = &p.db {
+            show_folders(&ui, db);
+        }
+        ui.set_minimize_to_tray(p.minimize_to_tray);
+        ui.set_online_art(p.logo_loader.is_some());
+        ui.set_version(concat!("Melora ", env!("CARGO_PKG_VERSION")).into());
+        ui.set_settings_note("".into());
+        ui.set_settings_open(true);
+    });
+    on!(on_minimize_to_tray_changed, |p, _ui, on| p
+        .set_minimize_to_tray(on));
+    let (file, b) = (db_file.clone(), base.clone());
+    on!(on_online_art_changed, |p, ui, on| p.set_online_art(
+        &ui,
+        on,
+        || logo_loader(&ui, &file, &b)
+    ));
+
     ui.on_quit(|| {
         let _ = slint::quit_event_loop();
     });
     on!(on_import_stations, |p, ui| {
         let picked = rfd::FileDialog::new()
-            .set_title("Import stations")
+            .set_title("Restore stations")
             .add_filter("Station lists", &["m3u", "m3u8", "txt"])
             .pick_file();
         if let Some(text) = picked.and_then(|f| std::fs::read_to_string(f).ok()) {
@@ -282,19 +329,26 @@ fn main() -> Result<(), slint::PlatformError> {
             } else {
                 &format!("{added} stations")
             };
-            ui.set_summary(format!("Imported {what}").into());
+            ui.set_summary(format!("Restored {what}").into());
+            ui.set_settings_note(format!("Restored {what}.").into());
         }
     });
     on!(on_export_stations, |p, ui| {
         let picked = rfd::FileDialog::new()
-            .set_title("Export stations")
+            .set_title("Back up stations")
             .add_filter("Station list", &["m3u"])
             .set_file_name("Melora stations.m3u")
             .save_file();
-        if let Some(file) = picked
-            && let Err(e) = std::fs::write(&file, p.export_stations())
-        {
-            ui.set_summary(format!("Couldn't save the stations ({e})").into());
+        if let Some(file) = picked {
+            let note = match std::fs::write(&file, p.export_stations()) {
+                Ok(()) => format!(
+                    "Backed up {} to {}.",
+                    rows::station_summary(p.stations.len()),
+                    file.display()
+                ),
+                Err(e) => format!("Couldn't save the stations ({e})."),
+            };
+            ui.set_settings_note(note.into());
         }
     });
 
@@ -340,11 +394,37 @@ fn main() -> Result<(), slint::PlatformError> {
         base.clone(),
         watching.clone(),
     );
-    ui.on_add_folder(move || {
+    let folders_changed = {
+        let (s, file, b, w) = (s.clone(), file.clone(), b.clone(), w.clone());
+        move |ui: &AppWindow, db: &Db| {
+            show_folders(ui, db);
+            start_scan(&s, ui, file.clone(), b.clone());
+            *w.borrow_mut() = watch_folders(db, ui);
+        }
+    };
+    let on_remove = {
+        let (weak, p, changed) = (weak.clone(), p.clone(), folders_changed.clone());
+        move |kind: i32, path: slint::SharedString| {
+            let Some(ui) = weak.upgrade() else { return };
+            let p = p.borrow();
+            let Some(db) = p.db.as_ref() else { return };
+            let Some(&kind) = KINDS.get(kind as usize) else {
+                return;
+            };
+            match db.remove_folder(kind, &path) {
+                Ok(()) => changed(&ui, db),
+                Err(e) => ui.set_settings_note(format!("Couldn't remove the folder ({e}).").into()),
+            }
+        }
+    };
+    ui.on_remove_folder(on_remove);
+    ui.on_add_folder(move |kind| {
         let Some(ui) = weak.upgrade() else { return };
         let p = p.borrow();
         let Some(db) = p.db.as_ref() else { return };
-        let kind = KINDS[p.tab];
+        let Some(&kind) = KINDS.get(kind as usize) else {
+            return;
+        };
         let title = if kind == Kind::Music {
             "Add a music folder"
         } else {
@@ -354,11 +434,8 @@ fn main() -> Result<(), slint::PlatformError> {
             return;
         };
         match db.add_folder(kind, &dir.to_string_lossy()) {
-            Ok(()) => {
-                start_scan(&s, &ui, file.clone(), b.clone());
-                *w.borrow_mut() = watch_folders(db, &ui);
-            }
-            Err(e) => ui.set_summary(format!("Couldn't add the folder ({e})").into()),
+            Ok(()) => folders_changed(&ui, db),
+            Err(e) => ui.set_settings_note(format!("Couldn't add the folder ({e}).").into()),
         }
     });
 
@@ -368,7 +445,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ticker.start(TimerMode::Repeated, Duration::from_millis(40), move || {
         if let Some(ui) = weak.upgrade() {
             p.borrow_mut().tick(&ui);
-            if to_tray
+            if p.borrow().minimize_to_tray
                 && p.borrow().tray.is_some()
                 && window::is_minimized(ui.window())
                 && window::is_visible(ui.window())

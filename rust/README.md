@@ -43,7 +43,11 @@ Phase 4, in progress:
   Play/Pause (Stop for radio), Next, Previous, Show Melora and Quit; the tooltip says what's
   playing. Minimizing hides to the tray (2.x's `minimizeToTray` setting, on unless turned off).
   Ctrl+Q quits. The first time it hides there, a balloon says so (once ever, as in 2.x).
-- Next: media keys and the Windows media overlay, then Settings, scrobbling and Discord.
+- Done: Settings (the gear at the right of the top bar), as in 2.x: Music and Mixes folders with
+  Add and Remove, backing up and restoring radio stations (.m3u), minimize to tray, and finding
+  covers and logos online, plus the version. Done or Escape closes it. Scrobbling, Discord and
+  the update check get their sections when they're built.
+- Next: media keys and the Windows media overlay, then scrobbling and Discord.
 
 Covers have 6 px rounded corners and DJ pictures are round, as in 2.x. The rounding is baked into
 the picture when it's shrunk, because Slint's software renderer doesn't round a cropped image.

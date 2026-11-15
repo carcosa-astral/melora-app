@@ -7,7 +7,7 @@ import { Theme } from "theme.slint";
 import { IconButton, TabButton, TextButton, ThinSlider } from "controls.slint";
 import { Row, TrackList } from "track_list.slint";
 import { Button } from "std-widgets.slint";
-import { ConfirmPanel, MenuItem, StationEditor } from "dialogs.slint";
+import { ConfirmPanel, MenuItem, SettingsPanel, StationEditor } from "dialogs.slint";
 
 export { Row }
 
@@ -63,11 +63,24 @@ export component AppWindow inherits Window {
     in property <bool> editor-busy;
     in-out property <bool> confirm-open;
     in property <string> confirm-message;
+    // Settings (filled in by Rust when it opens).
+    in-out property <bool> settings-open;
+    in property <[string]> music-folders;
+    in property <[string]> mixes-folders;
+    in-out property <bool> minimize-to-tray;
+    in-out property <bool> online-art;
+    in property <string> version;
+    in property <string> settings-note;
     property <int> menu-row: -1;
     property <length> menu-x;
     property <length> menu-y;
 
-    callback add-folder();
+    // Add a folder to Music (0) or Mixes (1); remove one.
+    callback add-folder(int);
+    callback remove-folder(int, string);
+    callback open-settings();
+    callback minimize-to-tray-changed(bool);
+    callback online-art-changed(bool);
     callback add-station();
     callback edit-station(int);
     callback delete-station(int);
@@ -203,6 +216,14 @@ export component AppWindow inherits Window {
                         large-step: 10;
                         label: "Volume";
                     }
+                    Rectangle { width: 10px; }
+                    IconButton {
+                        glyph: "\u{E713}";
+                        label: "Settings";
+                        muted: true;
+                        size: 34px;
+                        clicked => { open-settings(); }
+                    }
                 }
                 Rectangle {
                     y: parent.height - 1px;
@@ -237,20 +258,10 @@ export component AppWindow inherits Window {
                     }
                 }
                 Rectangle { horizontal-stretch: 1; }
-                if tab != 2: TextButton {
-                    glyph: "\u{E710}";
-                    text: tab == 0 ? "Add music folder" : "Add mixes folder";
-                    clicked => { add-folder(); }
-                }
                 if tab == 2: TextButton {
                     glyph: "\u{E710}";
                     text: "Add station";
                     clicked => { add-station(); }
-                }
-                if tab == 2: TextButton {
-                    glyph: "\u{E712}";
-                    label: "More: import or export stations";
-                    clicked => { stations-menu.show(); }
                 }
             }
             Rectangle {
@@ -280,7 +291,7 @@ export component AppWindow inherits Window {
                     padding-top: 10px;
                     if tab != 2: Button {
                         text: tab == 0 ? "Add music folder…" : "Add mixes folder…";
-                        clicked => { add-folder(); }
+                        clicked => { add-folder(tab); }
                     }
                     if tab == 2: Button {
                         text: "Add station…";
@@ -379,29 +390,6 @@ export component AppWindow inherits Window {
         }
     }
 
-    // The ⋯ button next to Add station.
-    stations-menu := PopupWindow {
-        x: root.width - 200px;
-        y: 96px;
-        Rectangle {
-            background: Theme.panel;
-            border-color: Theme.divider;
-            border-width: 1px;
-            border-radius: 6px;
-            VerticalLayout {
-                padding: 4px;
-                MenuItem {
-                    text: "Export stations…";
-                    clicked => { export-stations(); }
-                }
-                MenuItem {
-                    text: "Import stations…";
-                    clicked => { import-stations(); }
-                }
-            }
-        }
-    }
-
     if editor-open: StationEditor {
         width: root.width;
         height: root.height;
@@ -414,6 +402,24 @@ export component AppWindow inherits Window {
         check => { editor-check(); }
         save => { editor-save(); }
         cancel => { editor-open = false; }
+    }
+
+    if settings-open: SettingsPanel {
+        width: root.width;
+        height: root.height;
+        music-folders: music-folders;
+        mixes-folders: mixes-folders;
+        minimize-to-tray <=> minimize-to-tray;
+        online-art <=> online-art;
+        version: version;
+        note: settings-note;
+        add-folder(k) => { add-folder(k); }
+        remove-folder(k, path) => { remove-folder(k, path); }
+        export-stations => { export-stations(); }
+        import-stations => { import-stations(); }
+        minimize-to-tray-changed(on) => { minimize-to-tray-changed(on); }
+        online-art-changed(on) => { online-art-changed(on); }
+        done => { settings-open = false; }
     }
 
     if confirm-open: ConfirmPanel {

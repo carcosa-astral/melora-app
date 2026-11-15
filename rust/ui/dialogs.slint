@@ -1,6 +1,6 @@
 // In-window panels: adding or editing a radio station, confirming a delete, and small menus.
 // They cover the window in its own background colour (solid, no see-through scrim).
-import { Button, LineEdit } from "std-widgets.slint";
+import { Button, CheckBox, LineEdit, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 component Panel inherits Rectangle {
@@ -148,4 +148,179 @@ export component MenuItem inherits Rectangle {
         color: Theme.text;
         vertical-alignment: center;
     }
+}
+
+// One folder in a Settings list, with its Remove button.
+component FolderRow inherits Rectangle {
+    in property <string> path;
+    callback remove();
+    height: 34px;
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: path;
+            color: Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        Button {
+            text: "Remove";
+            accessible-label: "Remove " + path;
+            clicked => { remove(); }
+        }
+    }
+}
+
+component Heading inherits Text {
+    font-size: 15px;
+    font-weight: 600;
+    color: Theme.text;
+}
+
+component Hint inherits Text {
+    font-size: 12px;
+    color: Theme.dim;
+    wrap: word-wrap;
+}
+
+// Settings, as in 2.x: the library folders, backing up the radio stations, the window, looking
+// things up online, and about. It covers the window; Done or Escape closes it.
+export component SettingsPanel inherits Rectangle {
+    in property <[string]> music-folders;
+    in property <[string]> mixes-folders;
+    in-out property <bool> minimize-to-tray;
+    in-out property <bool> online-art;
+    in property <string> version;
+    in property <string> note;
+    callback add-folder(int);              // 0 Music, 1 Mixes
+    callback remove-folder(int, string);
+    callback export-stations();
+    callback import-stations();
+    callback minimize-to-tray-changed(bool);
+    callback online-art-changed(bool);
+    callback done();
+
+    background: Theme.background;
+    TouchArea { }
+    FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) { done(); return accept; }
+            reject
+        }
+        VerticalLayout {
+            HorizontalLayout {
+                padding-left: 24px;
+                padding-right: 16px;
+                padding-top: 12px;
+                padding-bottom: 12px;
+                Text {
+                    text: "Settings";
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                done-button := Button {
+                    text: "Done";
+                    primary: true;
+                    clicked => { done(); }
+                }
+            }
+            Rectangle {
+                height: 1px;
+                background: Theme.divider;
+            }
+            ScrollView {
+                vertical-stretch: 1;
+                HorizontalLayout {
+                    alignment: center;
+                    VerticalLayout {
+                        width: min(620px, root.width - 48px);
+                        padding-top: 20px;
+                        padding-bottom: 32px;
+                        spacing: 8px;
+
+                        if note != "": Text {
+                            text: note;
+                            color: Theme.accent;
+                            wrap: word-wrap;
+                        }
+
+                        Heading { text: "Music folders"; }
+                        if music-folders.length == 0: Hint { text: "None yet."; }
+                        for f in music-folders: FolderRow {
+                            path: f;
+                            remove => { remove-folder(0, f); }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: "Add folder…";
+                                accessible-label: "Add music folder";
+                                clicked => { add-folder(0); }
+                            }
+                        }
+
+                        Rectangle { height: 16px; }
+                        Heading { text: "Mixes folders"; }
+                        Hint { text: "Where you keep DJ sets and mixes. A mixes folder inside a music folder only shows up in Mixes."; }
+                        if mixes-folders.length == 0: Hint { text: "None yet."; }
+                        for f in mixes-folders: FolderRow {
+                            path: f;
+                            remove => { remove-folder(1, f); }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: "Add folder…";
+                                accessible-label: "Add mixes folder";
+                                clicked => { add-folder(1); }
+                            }
+                        }
+
+                        Rectangle { height: 16px; }
+                        Heading { text: "Radio stations"; }
+                        Hint { text: "Back up your stations to an .m3u file (other players can open it too), or restore them from one. Stations you already have are skipped."; }
+                        HorizontalLayout {
+                            alignment: start;
+                            spacing: 8px;
+                            Button {
+                                text: "Back up stations…";
+                                clicked => { export-stations(); }
+                            }
+                            Button {
+                                text: "Restore stations…";
+                                clicked => { import-stations(); }
+                            }
+                        }
+
+                        Rectangle { height: 16px; }
+                        Heading { text: "Window"; }
+                        CheckBox {
+                            text: "Minimizing sends Melora to the system tray";
+                            checked <=> minimize-to-tray;
+                            toggled => { minimize-to-tray-changed(self.checked); }
+                        }
+
+                        Rectangle { height: 16px; }
+                        Heading { text: "Online"; }
+                        CheckBox {
+                            text: "Find missing covers, DJ pictures and station logos online";
+                            checked <=> online-art;
+                            toggled => { online-art-changed(self.checked); }
+                        }
+                        Hint { text: "Station logos come from Radio Browser. Turning this off also hides the ones already found."; }
+
+                        Rectangle { height: 16px; }
+                        Heading { text: "About"; }
+                        Hint { text: version; }
+                    }
+                }
+            }
+        }
+    }
+
+    init => { done-button.focus(); }
 }

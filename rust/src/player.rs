@@ -117,6 +117,8 @@ pub struct Player {
     pub logo_loader: Option<logos::Loader>,
     /// The notification-area icon (None if Windows refused it).
     pub tray: Option<Tray>,
+    /// Minimizing hides Melora to the tray (2.x's setting).
+    pub minimize_to_tray: bool,
 }
 
 fn take<T>(slot: &Mutex<Option<T>>) -> Option<T> {
@@ -530,6 +532,27 @@ impl Player {
         self.save("repeat", self.queue.repeat.name());
         self.show_settings(ui);
         self.queue_next();
+    }
+
+    /// Settings: minimizing hides to the tray, or not.
+    pub fn set_minimize_to_tray(&mut self, on: bool) {
+        self.minimize_to_tray = on;
+        self.save("minimizeToTray", if on { "1" } else { "0" });
+    }
+
+    /// Settings: looking up logos (and later covers) online. Off also hides those already found,
+    /// as in 2.x. `loader` makes a new logo loader when it's turned on.
+    pub fn set_online_art(
+        &mut self,
+        ui: &AppWindow,
+        on: bool,
+        loader: impl FnOnce() -> logos::Loader,
+    ) {
+        self.save("onlineArt", if on { "1" } else { "0" });
+        self.logos.clear();
+        self.logos_pending.clear();
+        self.logo_loader = on.then(loader);
+        self.refresh_view(ui);
     }
 
     /// The first time Melora hides in the tray, a balloon says where it went (once ever, as 2.x).

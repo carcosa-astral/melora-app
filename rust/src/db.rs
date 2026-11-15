@@ -135,6 +135,29 @@ impl Db {
         Ok(())
     }
 
+    /// Stops a folder being part of a library. Its tracks go at the next scan.
+    pub fn remove_folder(&self, kind: Kind, full: &str) -> rusqlite::Result<()> {
+        // Compare full paths: a folder may be stored relative or absolute, in any case.
+        let target = full.trim_end_matches(['\\', '/']).to_lowercase();
+        let mut q = self
+            .conn
+            .prepare("SELECT id, path FROM folders WHERE library = ?1")?;
+        let rows: Vec<(i64, String)> = q
+            .query_map([kind.key()], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<Result<_, _>>()?;
+        for (id, stored) in rows {
+            if from_stored(&stored, &self.base)
+                .trim_end_matches(['\\', '/'])
+                .to_lowercase()
+                == target
+            {
+                self.conn
+                    .execute("DELETE FROM folders WHERE id = ?1", [id])?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn tracks(&self, kind: Kind) -> rusqlite::Result<Vec<TrackRow>> {
         let mut q = self.conn.prepare(
             "SELECT path, mtime, title, artist, album_artist, album, year, track_no, disc_no, duration_ms
@@ -335,6 +358,17 @@ mod tests {
         d.set_setting("volume", "0.5").expect("set");
         d.set_setting("volume", "0.8").expect("set");
         assert_eq!(d.setting("volume").as_deref(), Some("0.8"));
+    }
+
+    #[test]
+    fn removing_a_folder_matches_its_full_path() {
+        let d = db();
+        d.add_folder(Kind::Music, r"C:\_Apps\Melora\Music")
+            .expect("add"); // stored relative
+        d.add_folder(Kind::Music, r"D:\Other").expect("add");
+        d.remove_folder(Kind::Music, r"c:\_apps\melora\music\")
+            .expect("remove");
+        assert_eq!(d.folders(Kind::Music).expect("folders"), [r"D:\Other"]);
     }
 
     #[test]
