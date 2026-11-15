@@ -14,13 +14,16 @@ Phase 2, in progress:
   2.x's path rules and timestamps), and the Music screen lists albums with their discs and tracks.
   Add a folder with the button next to "Music". Arrow keys, Page Up/Down, Home/End, Enter and
   double-click; Space plays and pauses, Ctrl+Left/Right skip.
-- Next: the Mixes screen, album covers and DJ pictures, folder watching, shuffle and repeat.
+- Done: album covers, laid out as in 2.x (168 px on the left of each album). Found in the album's
+  folder (cover, folder, front or album .jpg/.jpeg/.png, also above CD1\ folders) or embedded in its
+  files, then shrunk to the size shown on a worker thread. Only covers near the view are kept.
+- Next: the Mixes screen and DJ pictures, folder watching, shuffle and repeat.
 
 The list draws only the rows on screen, at positions worked out in Rust, so it stays light however
 big the library is.
 
-Measured (release build): about 9 MB for the exe and BASS DLLs, about 26 MB of memory with
-149 tracks loaded, window up in well under a second.
+Measured (release build): about 9 MB for the exe and BASS DLLs, and about 27 MB of memory with
+149 tracks loaded after scrolling through every cover; the window is up in well under a second.
 
 ## Building
 
@@ -44,6 +47,7 @@ cargo build --release
 | `src/paths.rs` | Where data lives, and paths stored like 2.x (no drive letter on Melora's own drive) |
 | `src/db.rs` | `data\melora.db`, in exactly 2.x's tables |
 | `src/library.rs` | Scanning folders and grouping tracks into albums and DJs, with 2.x's rules |
+| `src/covers.rs` | Finding album covers and shrinking them on a worker thread |
 | `src/rows.rs` | The list's rows (headings and tracks), their positions, and keyboard steps |
 | `src/backdrop.rs` | Dark title bar on Windows |
 | `ui/app.slint` | The window |
@@ -63,6 +67,7 @@ Approved by Griff on 2026-11-15 for the 3.0 rewrite, when the no-crates rule was
 | `raw-window-handle` | To reach the native window (dark title bar) |
 | `slint-build` | Compiles `ui/*.slint` at build time |
 | `lofty` | Reads tags and embedded covers (2.x used TagLibSharp). Approved 2026-11-15 for phase 2 |
+| `image` (JPEG and PNG only) | Decodes and shrinks covers. Slint already uses the same version. Approved 2026-11-15 for phase 2 |
 | `rusqlite` (bundled SQLite) | The library database, in 2.x's layout. Approved 2026-11-15 for phase 2 |
 | BASS (DLLs, not a crate) | All playback, as in 2.x |
 

@@ -2548,6 +2548,7 @@ dependencies = [
 name = "melora"
 version = "3.0.0-alpha.1"
 dependencies = [
+ "image",
  "lofty",
  "raw-window-handle",
  "rfd",

@@ -3,6 +3,7 @@
 
 mod backdrop;
 mod bass;
+mod covers;
 mod db;
 mod engine;
 mod folder;
@@ -11,6 +12,7 @@ mod paths;
 mod rows;
 
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -36,6 +38,11 @@ struct Player {
     track_rows: Vec<usize>,
     /// The track playing (or paused), as an index into `lib.tracks`.
     index: Option<usize>,
+    /// Covers for albums near the view, by the album's sample track (None: it has none).
+    covers: HashMap<String, Option<slint::Image>>,
+    /// Covers asked for and not back yet.
+    pending: HashSet<String>,
+    loader: covers::Loader,
 }
 
 fn to_row(r: &ListRow, index: usize, playing: bool) -> Row {
@@ -53,6 +60,8 @@ fn to_row(r: &ListRow, index: usize, playing: bool) -> Row {
         y: r.y,
         height: r.height,
         playing,
+        art: slint::Image::default(),
+        has_art: false,
     }
 }
 
@@ -82,7 +91,7 @@ impl Player {
         let selected = find(selected).map(|i| self.track_rows[i]);
 
         ui.set_row_count(self.rows.len() as i32);
-        ui.set_list_height(self.rows.last().map_or(0.0, |r| r.y + r.height));
+        ui.set_list_height(rows::total_height(&self.rows));
         ui.set_selected(selected.map_or(-1, |r| r as i32));
         self.refresh_view(ui);
         ui.set_summary(rows::summary(&self.lib).into());
@@ -114,14 +123,45 @@ impl Player {
     }
 
     /// Hands the list the rows now in view, with the playing one marked.
-    fn refresh_view(&self, ui: &AppWindow) {
+    fn refresh_view(&mut self, ui: &AppWindow) {
         let range = rows::in_view(&self.rows, ui.get_list_scroll(), ui.get_list_view_height());
         let playing = self.index.and_then(|i| self.track_rows.get(i).copied());
-        self.model.set_vec(
-            range
-                .map(|r| to_row(&self.rows[r], r, Some(r) == playing))
-                .collect::<Vec<_>>(),
-        );
+        // Covers are made at the size they're shown, in real pixels.
+        let px = (rows::COVER_SIZE * ui.window().scale_factor()).round() as u32;
+        let mut shown = Vec::with_capacity(range.len());
+        let mut keys = Vec::new();
+        for r in range {
+            let mut row = to_row(&self.rows[r], r, Some(r) == playing);
+            if let Some(a) = self.rows[r].album {
+                let key = &self.lib.albums[a].sample_path;
+                keys.push(key.clone());
+                match self.covers.get(key) {
+                    Some(Some(art)) => (row.art, row.has_art) = (art.clone(), true),
+                    Some(None) => {}
+                    None => {
+                        if self.pending.insert(key.clone()) {
+                            self.loader.request(key.clone(), px);
+                        }
+                    }
+                }
+            }
+            shown.push(row);
+        }
+        self.model.set_vec(shown);
+        // Let covers scrolled far away go, as 2.x does, so memory doesn't grow with the library.
+        if self.covers.len() > 40 {
+            self.covers.retain(|k, _| keys.contains(k));
+        }
+    }
+
+    /// Takes in the covers the loader has finished and shows them.
+    fn covers_ready(&mut self, ui: &AppWindow) {
+        let done = std::mem::take(&mut *self.loader.done.lock().unwrap_or_else(|e| e.into_inner()));
+        for (key, cover) in done {
+            self.pending.remove(&key);
+            self.covers.insert(key, cover.map(slint::Image::from_rgba8));
+        }
+        self.refresh_view(ui);
     }
 
     fn set_index(&mut self, ui: &AppWindow, index: Option<usize>) {
@@ -236,7 +276,7 @@ impl Player {
         }
     }
 
-    fn move_selection(&self, ui: &AppWindow, steps: i32) {
+    fn move_selection(&mut self, ui: &AppWindow, steps: i32) {
         let from = usize::try_from(ui.get_selected()).ok();
         if let Some(r) = rows::step(&self.rows, from, steps) {
             ui.set_selected(r as i32);
@@ -316,6 +356,14 @@ fn main() -> Result<(), slint::PlatformError> {
         model,
         track_rows: Vec::new(),
         index: None,
+        covers: HashMap::new(),
+        pending: HashSet::new(),
+        loader: covers::Loader::new({
+            let weak = ui.as_weak();
+            move || {
+                let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_covers_ready());
+            }
+        }),
     }));
 
     if let Err(e) = bass::init(-1, &paths::base_dir()) {
@@ -363,12 +411,13 @@ fn main() -> Result<(), slint::PlatformError> {
         p.show_state(&ui)
     });
     on!(on_activate, |p, ui, row| p.activate(&ui, row));
+    on!(on_covers_ready, |p, ui| p.covers_ready(&ui));
 
     // Scrolling and resizing: show the rows now in view. Skipped while the player is busy, as it
     // refreshes the view itself after anything it scrolls.
     let (weak, p) = (ui.as_weak(), player.clone());
     ui.on_list_view_changed(move || {
-        if let (Some(ui), Ok(p)) = (weak.upgrade(), p.try_borrow()) {
+        if let (Some(ui), Ok(mut p)) = (weak.upgrade(), p.try_borrow_mut()) {
             p.refresh_view(&ui);
         }
     });

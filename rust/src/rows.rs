@@ -4,9 +4,13 @@
 use crate::library::Library;
 
 /// Row heights in pixels; the Slint list draws each kind at exactly this height.
-pub const ALBUM_HEIGHT: f32 = 72.0;
+pub const ALBUM_HEIGHT: f32 = 68.0;
 pub const DISC_HEIGHT: f32 = 30.0;
 pub const TRACK_HEIGHT: f32 = 32.0;
+/// The album cover, drawn left of the album's title and tracks (as in 2.x), and the space an
+/// album takes at least so a short one leaves room for its cover: margin, cover, margin.
+pub const COVER_SIZE: f32 = 168.0;
+pub const MIN_ALBUM_BLOCK: f32 = 20.0 + COVER_SIZE + 8.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RowKind {
@@ -26,6 +30,8 @@ pub struct ListRow {
     pub length: String,
     /// For track rows: the index into `Library::tracks`.
     pub track: Option<usize>,
+    /// For album rows: the index into `Library::albums`.
+    pub album: Option<usize>,
     /// Top of the row within the list, in pixels.
     pub y: f32,
     pub height: f32,
@@ -72,12 +78,18 @@ pub fn summary(lib: &Library) -> String {
 pub fn build(lib: &Library) -> Vec<ListRow> {
     let mut rows = Vec::new();
     let mut y = 0.0;
+    let mut album_top = f32::MIN;
     let mut push = |rows: &mut Vec<ListRow>, mut row: ListRow| {
         row.height = match row.kind {
             RowKind::Album => ALBUM_HEIGHT,
             RowKind::Disc => DISC_HEIGHT,
             RowKind::Track => TRACK_HEIGHT,
         };
+        if row.kind == RowKind::Album {
+            // A short album above still needs room for its cover.
+            y = f32::max(y, album_top + MIN_ALBUM_BLOCK);
+            album_top = y;
+        }
         row.y = y;
         y += row.height;
         rows.push(row);
@@ -99,6 +111,7 @@ pub fn build(lib: &Library) -> Vec<ListRow> {
                     kind: RowKind::Album,
                     title: a.title.clone(),
                     subtitle,
+                    album: Some(t.album),
                     ..blank()
                 },
             );
@@ -150,6 +163,7 @@ fn blank() -> ListRow {
         number: String::new(),
         length: String::new(),
         track: None,
+        album: None,
         y: 0.0,
         height: 0.0,
     }
@@ -159,11 +173,30 @@ fn blank() -> ListRow {
 /// side so fast scrolling doesn't show gaps.
 pub fn in_view(rows: &[ListRow], top: f32, height: f32) -> std::ops::Range<usize> {
     const SPARE: usize = 4;
-    let start = rows
+    let mut start = rows
         .partition_point(|r| r.y + r.height <= top)
         .saturating_sub(SPARE);
+    // The album heading draws the cover, which reaches below it: keep the heading while its
+    // cover can still be seen.
+    if let Some(a) = rows[..start].iter().rposition(|r| r.kind == RowKind::Album)
+        && rows[a].y + MIN_ALBUM_BLOCK > top
+        && rows[a + 1..start].iter().all(|r| r.kind != RowKind::Album)
+    {
+        start = a;
+    }
     let end = (rows.partition_point(|r| r.y < top + height) + SPARE).min(rows.len());
     start..end.max(start)
+}
+
+/// The height of the whole list, including room for the last album's cover.
+pub fn total_height(rows: &[ListRow]) -> f32 {
+    let end = rows.last().map_or(0.0, |r| r.y + r.height);
+    let last_album = rows
+        .iter()
+        .rev()
+        .find(|r| r.kind == RowKind::Album)
+        .map_or(0.0, |r| r.y + MIN_ALBUM_BLOCK);
+    end.max(last_album)
 }
 
 /// How far to scroll so row `r` is fully in view, moving as little as possible. Scrolling up to
@@ -280,7 +313,9 @@ mod tests {
         let t = l.tracks[2].clone();
         l.tracks = vec![t; 100]; // one album heading, then 100 tracks
         let rows = build(&l);
-        assert_eq!(in_view(&rows, 0.0, 200.0), 0..9); // the heading and 4 tracks start above 200 px, then 4 spare
+        assert_eq!(in_view(&rows, 0.0, 200.0), 0..10); // the heading and 5 tracks start above 200 px, then 4 spare
+        let r = in_view(&rows, 150.0, 100.0);
+        assert_eq!(r.start, 0); // the heading stays while its cover shows
         let r = in_view(&rows, 1000.0, 100.0);
         assert!(rows[r.start + 4].y <= 1000.0 && rows[r.end - 5].y < 1100.0);
         assert_eq!(in_view(&rows, 99_999.0, 100.0), 97..101);
@@ -289,11 +324,13 @@ mod tests {
 
     #[test]
     fn scrolling_to_a_row_moves_as_little_as_possible() {
-        let rows = build(&lib()); // Alpha 0-72, Disc 1 72-102, One 102-134, Disc 2, Two 164-196, Beta 196-268, Solo 268-300
+        let rows = build(&lib()); // Alpha 0-68, Disc 1 68-98, One 98-130, Disc 2 130-160, Two 160-192, Beta 196-264, Solo 264-296
+        assert_eq!(rows[5].y, MIN_ALBUM_BLOCK); // Alpha is short, so Beta waits for its cover
+        assert_eq!(total_height(&rows), 196.0 + MIN_ALBUM_BLOCK);
         assert_eq!(scroll_to(&rows, 2, 0.0, 200.0), 0.0); // already in view
-        assert_eq!(scroll_to(&rows, 6, 0.0, 200.0), 100.0); // bottom edge lines up
+        assert_eq!(scroll_to(&rows, 6, 0.0, 200.0), 96.0); // bottom edge lines up
         assert_eq!(scroll_to(&rows, 2, 150.0, 200.0), 0.0); // up to an album's first track: its headings too
-        assert_eq!(scroll_to(&rows, 4, 180.0, 200.0), 134.0); // and to a disc's first track: its disc heading
+        assert_eq!(scroll_to(&rows, 4, 180.0, 200.0), 130.0); // and to a disc's first track: its disc heading
     }
 
     #[test]

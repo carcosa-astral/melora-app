@@ -7,6 +7,7 @@ license = "MIT"
 publish = false
 
 [dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 lofty = "0.25.5"
 raw-window-handle = "0.6"
 rfd = "0.18.0"

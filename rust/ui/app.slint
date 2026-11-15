@@ -46,6 +46,8 @@ export component AppWindow inherits Window {
     // A background scan has a new library waiting.
     callback library-ready();
     callback list-view-changed();
+    // Covers have been loaded in the background.
+    callback covers-ready();
 
     forward-focus: list;
 

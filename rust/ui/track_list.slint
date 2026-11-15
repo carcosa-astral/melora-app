@@ -16,6 +16,17 @@ export struct Row {
     y: length,
     height: length,
     playing: bool,
+    // Album rows: the cover, once loaded.
+    art: image,
+    has-art: bool,
+}
+
+// Album covers sit left of their album, as in 2.x; titles, disc headings and tracks line up
+// to their right.
+global Layout {
+    out property <length> cover: 168px;          // rows.rs COVER_SIZE
+    out property <length> margin: 20px;
+    out property <length> indent: 20px + 168px + 20px;
 }
 
 component RowView inherits Rectangle {
@@ -27,7 +38,6 @@ component RowView inherits Rectangle {
     callback double-clicked();
 
     height: item.height;
-    background: selected ? Theme.panel : transparent;
     accessible-role: list-item;
     accessible-label: item.kind == 0 ? "Album: " + item.title + ", " + item.subtitle
         : item.kind == 1 ? item.title
@@ -37,30 +47,51 @@ component RowView inherits Rectangle {
     accessible-item-index: index;
     accessible-item-count: count;
 
+    // The selection only covers the track itself, never the cover beside it.
+    if selected: Rectangle {
+        x: Layout.indent - 8px;
+        width: parent.width - self.x - 12px;
+        border-radius: 4px;
+        background: Theme.panel;
+    }
+
     TouchArea {
         clicked => { root.clicked(); }
         double-clicked => { root.double-clicked(); }
     }
 
-    if item.kind == 0: HorizontalLayout {
-        padding-left: 16px;
-        padding-right: 16px;
-        padding-top: 14px;
-        padding-bottom: 6px;
-        spacing: 12px;
-        // Covers come later in phase 2; a plain square holds their place.
+    if item.kind == 0: Rectangle {
+        // The cover reaches below this row, beside the album's tracks; the list keeps room for it.
         Rectangle {
-            width: 52px;
-            height: 52px;
-            border-radius: 4px;
+            x: Layout.margin;
+            y: Layout.margin;
+            width: Layout.cover;
+            height: Layout.cover;
+            border-radius: 6px;
+            clip: true;
             background: Theme.panel;
+            if !item.has-art: Text {
+                text: "\u{E8D6}";
+                font-family: "Segoe Fluent Icons";
+                font-size: 36px;
+                color: Theme.divider;
+            }
+            if item.has-art: Image {
+                width: parent.width;
+                height: parent.height;
+                source: item.art;
+                image-fit: cover;
+            }
         }
         VerticalLayout {
-            alignment: center;
+            x: Layout.indent;
+            width: parent.width - self.x - 16px;
+            padding-top: Layout.margin + 2px;
             spacing: 2px;
+            alignment: start;
             Text {
                 text: item.title;
-                font-size: 15px;
+                font-size: 16px;
                 font-weight: 600;
                 color: Theme.text;
                 overflow: elide;
@@ -73,25 +104,24 @@ component RowView inherits Rectangle {
         }
     }
 
-    if item.kind == 1: HorizontalLayout {
-        padding-left: 80px;
-        padding-top: 8px;
-        Text {
-            text: item.title;
-            font-size: 12px;
-            font-weight: 600;
-            color: Theme.dim;
-            vertical-alignment: center;
-        }
+    if item.kind == 1: Text {
+        x: Layout.indent;
+        y: 8px;
+        height: parent.height - 8px;
+        text: item.title;
+        font-size: 12px;
+        font-weight: 600;
+        color: Theme.dim;
+        vertical-alignment: center;
     }
 
     if item.kind == 2: HorizontalLayout {
-        padding-left: 16px;
-        padding-right: 20px;
+        x: Layout.indent;
+        width: parent.width - self.x - 20px;
         spacing: 12px;
         Text {
             text: item.playing ? "▶" : item.number;
-            width: 52px;
+            width: 22px;
             horizontal-alignment: right;
             vertical-alignment: center;
             color: item.playing ? Theme.accent : Theme.dim;
