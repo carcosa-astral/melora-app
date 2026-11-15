@@ -234,6 +234,14 @@ export component SettingsPanel inherits Rectangle {
     callback online-art-changed(bool);
     callback done();
     callback open-log();
+    // Updates.
+    in-out property <bool> update-enabled;
+    in property <string> update-status;
+    // "Melora 3.0.1" when a newer one is out, else empty.
+    in property <string> update-available;
+    callback update-enabled-changed(bool);
+    callback check-updates();
+    callback open-update();
 
     background: Theme.background;
     TouchArea { }
@@ -468,6 +476,29 @@ export component SettingsPanel inherits Rectangle {
                         Rectangle { height: 16px; }
                         Heading { text: "About"; }
                         Hint { text: version; }
+                        CheckBox {
+                            text: "Check GitHub for new versions (once a day)";
+                            checked <=> update-enabled;
+                            toggled => { update-enabled-changed(self.checked); }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            Hint {
+                                text: update-status;
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                            }
+                            if update-available != "": Button {
+                                text: "Get " + update-available + "…";
+                                clicked => { open-update(); }
+                            }
+                            Button {
+                                text: "Check now";
+                                enabled: update-enabled;
+                                clicked => { check-updates(); }
+                            }
+                        }
+                        Hint { text: "Melora only looks and links to the release; nothing is downloaded or installed."; }
                         Rectangle { height: 6px; }
                         HorizontalLayout {
                             spacing: 12px;

@@ -95,6 +95,16 @@ export component AppWindow inherits Window {
     callback remove-folder(int, string);
     callback open-settings();
     callback open-log();
+    in-out property <bool> update-enabled;
+    in property <string> update-status;
+    in property <string> update-available;
+    callback update-enabled-changed(bool);
+    callback check-updates();
+    callback open-update();
+    // An update check finished in the background.
+    callback update-checked();
+    // Settings has just opened (Rust fills in the update line).
+    callback settings-shown();
     callback toggle-love();
     callback scrobble-mixes-changed(bool);
     callback lastfm-connect();
@@ -497,6 +507,12 @@ export component AppWindow inherits Window {
         online-art-changed(on) => { online-art-changed(on); }
         done => { settings-open = false; }
         open-log => { open-log(); }
+        update-enabled <=> update-enabled;
+        update-status: update-status;
+        update-available: update-available;
+        update-enabled-changed(on) => { update-enabled-changed(on); }
+        check-updates => { check-updates(); }
+        open-update => { open-update(); }
     }
 
     if confirm-open: ConfirmPanel {

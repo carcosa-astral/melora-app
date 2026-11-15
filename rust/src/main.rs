@@ -20,6 +20,7 @@ mod rows;
 mod scrobble;
 mod scrobbler;
 mod tray;
+mod update;
 mod watch;
 mod window;
 
@@ -343,6 +344,7 @@ fn main() -> Result<(), slint::PlatformError> {
         }
         p.show_scrobbling(&ui);
         p.show_discord(&ui);
+        ui.invoke_settings_shown();
         ui.set_settings_open(true);
     });
     // Scrobbling and loves.
@@ -402,6 +404,95 @@ fn main() -> Result<(), slint::PlatformError> {
             _ => {}
         }
     });
+
+    // Updates: checked once a day at startup, and from Settings.
+    let updates = Rc::new(update::Checker::new(db_file.clone(), base.clone()));
+    let show_updates = {
+        let (p, u) = (player.clone(), updates.clone());
+        move |ui: &AppWindow| {
+            let p = p.borrow();
+            let Some(db) = &p.db else { return };
+            ui.set_update_enabled(update::enabled(db));
+            ui.set_update_status(u.status(db).into());
+            let available = update::available(db)
+                .map(|(v, _)| format!("Melora {v}"))
+                .unwrap_or_default();
+            ui.set_update_available(available.into());
+        }
+    };
+    let check = {
+        let (u, weak) = (updates.clone(), ui.as_weak());
+        move || {
+            let weak = weak.clone();
+            u.check(move || {
+                let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_update_checked());
+            });
+        }
+    };
+    if player
+        .borrow()
+        .db
+        .as_ref()
+        .is_some_and(|db| update::due(db, online::now()))
+    {
+        check();
+    }
+    {
+        let (weak, show) = (ui.as_weak(), show_updates.clone());
+        ui.on_update_checked(move || {
+            if let Some(ui) = weak.upgrade() {
+                show(&ui);
+            }
+        });
+    }
+    {
+        let (weak, p, show, check) = (
+            ui.as_weak(),
+            player.clone(),
+            show_updates.clone(),
+            check.clone(),
+        );
+        ui.on_update_enabled_changed(move |on| {
+            let Some(ui) = weak.upgrade() else { return };
+            if let Some(db) = &p.borrow().db {
+                let _ = db.set_setting("update.enabled", if on { "1" } else { "0" });
+            }
+            if on {
+                check();
+            }
+            show(&ui);
+        });
+    }
+    {
+        let (weak, show, check) = (ui.as_weak(), show_updates.clone(), check.clone());
+        ui.on_check_updates(move || {
+            check();
+            if let Some(ui) = weak.upgrade() {
+                show(&ui);
+            }
+        });
+    }
+    {
+        let p = player.clone();
+        ui.on_open_update(move || {
+            let url = p
+                .borrow()
+                .db
+                .as_ref()
+                .and_then(update::available)
+                .map(|(_, u)| u);
+            window::open_url(&url.unwrap_or_else(|| update::RELEASES_PAGE.to_string()));
+        });
+    }
+    {
+        let show = show_updates.clone();
+        let weak = ui.as_weak();
+        ui.on_settings_shown(move || {
+            if let Some(ui) = weak.upgrade() {
+                show(&ui);
+            }
+        });
+    }
 
     ui.on_open_log(|| window::open_url(&log::ensure().to_string_lossy()));
 
