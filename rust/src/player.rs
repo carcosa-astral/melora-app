@@ -138,6 +138,9 @@ pub struct Player {
     pub discord: Option<Discord>,
     /// When the playing station was tuned in to (Unix ms), for Discord's time.
     pub tuned_in_at: i64,
+    /// Type to jump: what's been typed, and when the last letter came.
+    pub typed: String,
+    pub typed_at: Instant,
 }
 
 /// A play being listened to: it's scrobbled once enough has been heard (see scrobble.rs).
@@ -292,6 +295,69 @@ impl Player {
                 .and_then(|i| self.views[v].lib.tracks.get(i))
         });
         self.engine.set_next(next.map(|t| Path::new(&t.path)));
+    }
+
+    /// Selects list row `r` on screen and scrolls to it, its heading on top when it fits.
+    fn show_row(&mut self, ui: &AppWindow, r: usize) {
+        let rows = &self.views[self.tab].rows;
+        ui.set_selected(r as i32);
+        ui.set_list_scroll(rows::scroll_showing(rows, r, ui.get_list_view_height()));
+        self.refresh_view(ui);
+    }
+
+    /// Type to jump: a letter typed in the list. Letters typed within a second make one name;
+    /// Space only counts while typing one (otherwise it's play/pause). True when it was used.
+    pub fn typed(&mut self, ui: &AppWindow, text: &str) -> bool {
+        let mut chars = text.chars();
+        let (Some(c), None) = (chars.next(), chars.next()) else {
+            return false;
+        };
+        // Control keys and Slint's own key codes (arrows and the like) aren't typing.
+        if c.is_control() || ('\u{E000}'..='\u{F8FF}').contains(&c) {
+            return false;
+        }
+        let typing = self.typed_at.elapsed() < Duration::from_secs(1) && !self.typed.is_empty();
+        if c == ' ' && !typing {
+            return false;
+        }
+        if !typing {
+            self.typed.clear();
+        }
+        self.typed.push(c);
+        self.typed_at = Instant::now();
+
+        let view = &self.views[self.tab];
+        // Music: artists; Mixes: DJs; Radio: stations. Each points at the first track under it.
+        let entries: Vec<(usize, &str)> = view
+            .rows
+            .iter()
+            .enumerate()
+            .filter_map(|(r, row)| match row.kind {
+                RowKind::Album => row
+                    .album
+                    .map(|a| (r + 1, view.lib.albums[a].artist.as_str())),
+                RowKind::Dj => Some((r + 1, row.title.as_str())),
+                RowKind::Station => Some((r, row.title.as_str())),
+                _ => None,
+            })
+            .collect();
+        if let Some(r) = rows::jump(&entries, &self.typed) {
+            // An album's first row may be a disc heading: land on its first track.
+            let r = rows::step(&view.rows, Some(r), 1)
+                .filter(|_| view.rows[r].track.is_none())
+                .unwrap_or(r);
+            self.show_row(ui, r);
+        }
+        true
+    }
+
+    /// Ctrl+J, or a click on what's playing: shows it in its list, switching tabs if needed.
+    pub fn jump_to_playing(&mut self, ui: &AppWindow) {
+        let Some((v, i)) = self.playing else { return };
+        self.show_tab(ui, v);
+        if let Some(&r) = self.views[v].track_rows.get(i) {
+            self.show_row(ui, r);
+        }
     }
 
     /// Hands the list the rows now in view, with the playing one marked and their pictures.

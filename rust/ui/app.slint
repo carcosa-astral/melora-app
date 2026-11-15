@@ -136,6 +136,9 @@ export component AppWindow inherits Window {
     changed volume => { volume-changed(volume); }
     callback activate(int);
     callback move-selection(int);
+    callback typed(string) -> bool;
+    // Ctrl+J, or a click on what's playing: show it in its list.
+    callback jump-to-playing();
     // A background scan has a new library waiting.
     callback library-ready();
     // Something changed in a library folder.
@@ -158,6 +161,8 @@ export component AppWindow inherits Window {
             if (e.text == " ") { toggle-play(); return accept; }
             if (e.modifiers.control && e.text == Key.LeftArrow) { previous(); return accept; }
             if (e.modifiers.control && e.text == Key.RightArrow) { next(); return accept; }
+            // Ctrl+J shows what's playing in its list (0x0A is how some keyboards send it).
+            if (e.modifiers.control && (e.text == "j" || e.text == "J" || e.text == "\u{0A}")) { jump-to-playing(); return accept; }
             // Ctrl+L loves, as in 2.x (0x0C is how some keyboards send it).
             if (e.modifiers.control && (e.text == "l" || e.text == "L" || e.text == "\u{0C}")) { toggle-love(); return accept; }
             // Some keyboards send Ctrl+Q as the control character 0x11 rather than "q".
@@ -357,6 +362,7 @@ export component AppWindow inherits Window {
                 label: tab == 0 ? "Music" : tab == 1 ? "Mixes" : "Radio stations";
                 move-selection(n) => { move-selection(n); }
                 activate(i) => { activate(i); }
+                typed(t) => { return typed(t); }
                 edit-row(i) => { if (tab == 2) { edit-station(i); } }
                 delete-row(i) => { if (tab == 2) { delete-station(i); } }
                 row-menu(i, x, y) => {
@@ -387,6 +393,13 @@ export component AppWindow inherits Window {
                         color: now-playing == "" ? Theme.dim : Theme.text;
                         overflow: elide;
                         horizontal-stretch: 1;
+                        accessible-role: button;
+                        accessible-label: now-playing == "" ? "Nothing playing" : "Show in the list: " + now-playing;
+                        accessible-action-default => { jump-to-playing(); }
+                        TouchArea {
+                            mouse-cursor: now-playing == "" ? default : pointer;
+                            clicked => { jump-to-playing(); }
+                        }
                     }
                     Text {
                         text: format-text;

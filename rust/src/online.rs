@@ -84,6 +84,12 @@ pub fn normalize(name: &str, keep_brackets: bool) -> String {
     words.concat()
 }
 
+/// A name lower-cased and without accents, keeping its spaces and punctuation: for "starts with"
+/// checks (type to jump).
+pub fn normalize_for_prefix(name: &str) -> String {
+    name.to_lowercase().chars().map(plain).collect()
+}
+
 /// Loose comparison: as `normalize`, and one name may start with the other ("Album" and "Album
 /// Deluxe Edition") if the shorter has at least 4 letters.
 pub fn same_name(a: &str, b: &str) -> bool {

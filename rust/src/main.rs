@@ -219,6 +219,8 @@ fn main() -> Result<(), slint::PlatformError> {
             })
         }),
         tuned_in_at: 0,
+        typed: String::new(),
+        typed_at: Instant::now(),
         // Tray clicks and menu choices arrive off to the side; hand them to the window's thread.
         tray: tray::Tray::new({
             let weak = ui.as_weak();
@@ -345,6 +347,12 @@ fn main() -> Result<(), slint::PlatformError> {
     });
     // Scrobbling and loves.
     on!(on_toggle_love, |p, ui| p.toggle_love(&ui));
+    on!(on_jump_to_playing, |p, ui| p.jump_to_playing(&ui));
+    let (weak, p) = (ui.as_weak(), player.clone());
+    ui.on_typed(move |text| match (weak.upgrade(), p.try_borrow_mut()) {
+        (Some(ui), Ok(mut p)) => p.typed(&ui, &text),
+        _ => false,
+    });
     on!(on_scrobbler_report, |p, ui| {
         p.scrobbler_report(&ui);
         p.track_started_heart(&ui)

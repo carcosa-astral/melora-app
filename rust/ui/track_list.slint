@@ -294,6 +294,8 @@ export component TrackList inherits FocusScope {
     // Radio: F2 edits, Delete removes, right-click opens the station menu (at a window point).
     callback edit-row(int);
     callback delete-row(int);
+    // Type to jump: letters typed in the list. True when used (Space only while typing a name).
+    callback typed(string) -> bool;
     callback row-menu(int, length, length);
     // The scroll position or the height changed: Rust hands over the rows now in view.
     callback view-changed();
@@ -314,6 +316,7 @@ export component TrackList inherits FocusScope {
         if (e.text == Key.End) { move-selection(1000000); return accept; }
         if (e.text == Key.Return && selected >= 0) { activate(selected); return accept; }
         if (e.text == Key.F2 && selected >= 0) { edit-row(selected); return accept; }
+        if (typed(e.text)) { return accept; }
         if (e.text == Key.Delete && selected >= 0) { delete-row(selected); return accept; }
         reject
     }

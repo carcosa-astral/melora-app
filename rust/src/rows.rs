@@ -348,6 +348,67 @@ pub fn scroll_to(rows: &[ListRow], r: usize, top: f32, height: f32) -> f32 {
     }
 }
 
+/// Type to jump, as 2.x's ListJump: the first entry (in list order) whose name starts with what
+/// was typed, ignoring case, accents and a leading "The". Typing one letter again and again
+/// ("bbb") steps through the names starting with it, as Explorer does. `entries` are (row, name);
+/// a name repeated (an artist's albums) counts once. Not a search: nothing is hidden.
+pub fn jump(entries: &[(usize, &str)], typed: &str) -> Option<usize> {
+    let plain = |s: &str| crate::online::normalize_for_prefix(s);
+    if typed.trim().is_empty() {
+        return None;
+    }
+    let first = typed.chars().next()?.to_lowercase().next()?;
+    let repeated = typed.chars().count() > 1
+        && typed
+            .chars()
+            .all(|c| c.to_lowercase().next() == Some(first));
+    let prefix = plain(if repeated {
+        &typed[..typed.chars().next()?.len_utf8()]
+    } else {
+        typed
+    });
+    let mut seen = std::collections::HashSet::new();
+    let starts: Vec<usize> = entries
+        .iter()
+        .filter(|(_, name)| seen.insert(name.to_lowercase()))
+        .filter(|(_, name)| {
+            let n = plain(name);
+            n.starts_with(&prefix)
+                || n.strip_prefix("the ")
+                    .is_some_and(|rest| rest.starts_with(&prefix))
+        })
+        .map(|(r, _)| *r)
+        .collect();
+    if starts.is_empty() {
+        return None;
+    }
+    Some(if repeated {
+        starts[(typed.chars().count() - 1) % starts.len()]
+    } else {
+        starts[0]
+    })
+}
+
+/// The heading a row sits under (an album or DJ heading, not a disc heading), or the row itself.
+pub fn heading_of(rows: &[ListRow], r: usize) -> usize {
+    (0..=r)
+        .rev()
+        .find(|&i| matches!(rows[i].kind, RowKind::Album | RowKind::Dj))
+        .unwrap_or(r)
+}
+
+/// Where to scroll to show row `r`, as 2.x does: its heading at the top when the heading and
+/// the row fit in the view, else the row a third of the way down.
+pub fn scroll_showing(rows: &[ListRow], r: usize, height: f32) -> f32 {
+    let Some(row) = rows.get(r) else { return 0.0 };
+    let top = rows[heading_of(rows, r)].y;
+    if row.y + row.height - top <= height {
+        top
+    } else {
+        (row.y - height / 3.0).max(0.0)
+    }
+}
+
 /// The track row `steps` track rows away from `from` (negative: up), stopping at the first and
 /// last tracks. Headings are skipped. None when the list has no tracks.
 pub fn step(rows: &[ListRow], from: Option<usize>, steps: i32) -> Option<usize> {
@@ -530,6 +591,36 @@ mod tests {
         assert_eq!((rows[1].track, rows[1].y), (Some(1), STATION_HEIGHT));
         assert_eq!(step(&rows, Some(0), 1), Some(1));
         assert_eq!(station_summary(2), "2 stations");
+    }
+
+    #[test]
+    fn type_to_jump_like_2x() {
+        let e = [
+            (0, "ABBA"),
+            (5, "Björk"),
+            (9, "The Beatles"),
+            (12, "Björk"),
+            (15, "Bonobo"),
+            (20, "Café del Mar"),
+        ];
+        assert_eq!(jump(&e, "bj"), Some(5));
+        assert_eq!(jump(&e, "BEA"), Some(9)); // "The" is skipped
+        assert_eq!(jump(&e, "cafe"), Some(20)); // accents ignored
+        assert_eq!(jump(&e, "b"), Some(5));
+        assert_eq!(jump(&e, "bb"), Some(9)); // the next name starting with b
+        assert_eq!(jump(&e, "bbb"), Some(15)); // Björk's second entry counts once
+        assert_eq!(jump(&e, "bbbb"), Some(5)); // and round again
+        assert_eq!(jump(&e, "zz"), None);
+        assert_eq!(jump(&e, " "), None);
+    }
+
+    #[test]
+    fn showing_a_row_puts_its_heading_on_top_when_it_fits() {
+        let rows = build(&lib(), Kind::Music); // Alpha 0, Disc 1, One 98, Disc 2, Two 160, Beta 196, Solo 264
+        assert_eq!(heading_of(&rows, 4), 0);
+        assert_eq!(scroll_showing(&rows, 4, 400.0), 0.0); // Alpha's heading on top
+        assert_eq!(scroll_showing(&rows, 6, 400.0), 196.0); // Beta's
+        assert_eq!(scroll_showing(&rows, 4, 100.0), 160.0 - 100.0 / 3.0); // doesn't fit: a third down
     }
 
     #[test]
