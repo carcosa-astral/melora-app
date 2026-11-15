@@ -172,6 +172,16 @@ component FolderRow inherits Rectangle {
     }
 }
 
+// A scrobbling service's state in Settings.
+export struct Account {
+    connected: bool,
+    // "Connected as griff", or why it needs connecting again.
+    status: string,
+    // What Connect is doing, or why it didn't work.
+    message: string,
+    busy: bool,
+}
+
 component Heading inherits Text {
     font-size: 15px;
     font-weight: 600;
@@ -193,6 +203,19 @@ export component SettingsPanel inherits Rectangle {
     in-out property <bool> online-art;
     in property <string> version;
     in property <string> note;
+    // Scrobbling.
+    in-out property <bool> scrobble-mixes;
+    in property <string> pending;
+    in property <Account> lastfm;
+    in property <Account> listenbrainz;
+    in-out property <string> lastfm-key;
+    in-out property <string> lastfm-secret;
+    in-out property <string> listenbrainz-token;
+    callback scrobble-mixes-changed(bool);
+    callback lastfm-connect();
+    callback lastfm-disconnect();
+    callback listenbrainz-connect();
+    callback listenbrainz-disconnect();
     callback add-folder(int);              // 0 Music, 1 Mixes
     callback remove-folder(int, string);
     callback export-stations();
@@ -312,6 +335,94 @@ export component SettingsPanel inherits Rectangle {
                             toggled => { online-art-changed(self.checked); }
                         }
                         Hint { text: "Station logos come from Radio Browser. Turning this off also hides the ones already found."; }
+
+                        Rectangle { height: 16px; }
+                        Heading { text: "Scrobbling"; }
+                        Hint { text: "A play counts once you've listened to half of it or 4 minutes, whichever comes first. Tracks of 30 seconds or less and radio aren't scrobbled. Plays wait in Melora while you're offline."; }
+                        CheckBox {
+                            text: "Scrobble mixes too";
+                            checked <=> scrobble-mixes;
+                            toggled => { scrobble-mixes-changed(self.checked); }
+                        }
+                        if pending != "": Hint { text: pending; }
+
+                        Rectangle { height: 6px; }
+                        Text {
+                            text: "Last.fm";
+                            font-weight: 600;
+                            color: Theme.text;
+                        }
+                        if lastfm.status != "": Hint { text: lastfm.status; }
+                        if lastfm.connected: HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: "Disconnect";
+                                accessible-label: "Disconnect Last.fm";
+                                clicked => { lastfm-disconnect(); }
+                            }
+                        }
+                        if !lastfm.connected: VerticalLayout {
+                            spacing: 6px;
+                            Hint { text: "Make an API account at last.fm/api/account/create (any name works), then paste its key and shared secret here."; }
+                            LineEdit {
+                                text <=> root.lastfm-key;
+                                placeholder-text: "API key";
+                                accessible-label: "Last.fm API key";
+                            }
+                            LineEdit {
+                                text <=> root.lastfm-secret;
+                                placeholder-text: "Shared secret";
+                                input-type: password;
+                                accessible-label: "Last.fm shared secret";
+                            }
+                            HorizontalLayout {
+                                alignment: start;
+                                Button {
+                                    text: "Connect…";
+                                    accessible-label: "Connect Last.fm";
+                                    enabled: !lastfm.busy;
+                                    clicked => { lastfm-connect(); }
+                                }
+                            }
+                        }
+                        if lastfm.message != "": Hint { text: lastfm.message; }
+
+                        Rectangle { height: 6px; }
+                        Text {
+                            text: "ListenBrainz";
+                            font-weight: 600;
+                            color: Theme.text;
+                        }
+                        if listenbrainz.status != "": Hint { text: listenbrainz.status; }
+                        if listenbrainz.connected: HorizontalLayout {
+                            alignment: start;
+                            Button {
+                                text: "Disconnect";
+                                accessible-label: "Disconnect ListenBrainz";
+                                clicked => { listenbrainz-disconnect(); }
+                            }
+                        }
+                        if !listenbrainz.connected: VerticalLayout {
+                            spacing: 6px;
+                            Hint { text: "Your user token is on listenbrainz.org/settings."; }
+                            LineEdit {
+                                text <=> root.listenbrainz-token;
+                                placeholder-text: "User token";
+                                input-type: password;
+                                accessible-label: "ListenBrainz user token";
+                            }
+                            HorizontalLayout {
+                                alignment: start;
+                                Button {
+                                    text: "Connect";
+                                    accessible-label: "Connect ListenBrainz";
+                                    enabled: !listenbrainz.busy;
+                                    clicked => { listenbrainz-connect(); }
+                                }
+                            }
+                        }
+                        if listenbrainz.message != "": Hint { text: listenbrainz.message; }
+                        Hint { text: "Keys and tokens are kept in Melora's data folder, next to Melora.exe."; }
 
                         Rectangle { height: 16px; }
                         Heading { text: "About"; }

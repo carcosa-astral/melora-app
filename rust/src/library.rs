@@ -40,6 +40,9 @@ pub struct Track {
     /// "Disc 2" for a track on an album with more than one disc; empty otherwise.
     pub disc: String,
     pub duration_ms: i64,
+    /// The album and album artist as tagged (None when untagged), for scrobbling.
+    pub album_tag: Option<String>,
+    pub album_artist_tag: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -186,6 +189,8 @@ pub fn load(rows: &[TrackRow], kind: Kind, roots: &[String], base: &str) -> Libr
                 String::new()
             },
             duration_ms: f.row.duration_ms,
+            album_tag: f.album.clone(),
+            album_artist_tag: f.album_artist.clone(),
         })
         .collect();
 
@@ -341,6 +346,15 @@ fn read_tags(path: &Path, stored: String, mtime: i64) -> TrackRow {
         .find_map(|s| s.get(..4).and_then(|y| y.parse().ok()))
         .unwrap_or(0);
     row
+}
+
+/// A file's MusicBrainz recording ID (Picard writes one), for loving on ListenBrainz.
+pub fn recording_mbid(path: &Path) -> Option<String> {
+    let file = lofty::read_from_path(path).ok()?;
+    let tag = file.primary_tag().or_else(|| file.first_tag())?;
+    tag.get_string(ItemKey::MusicBrainzRecordingId)
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
 }
 
 /// Brings the database in line with the folders on disk. Returns true if anything changed.

@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use slint::{ComponentHandle, VecModel};
 
@@ -15,8 +16,10 @@ use crate::library::Library;
 use crate::media::{self, Cover, Media};
 use crate::queue::{Info, Queue, Repeat};
 use crate::rows::{self, ListRow, RowKind};
+use crate::scrobble::{self, Love, Scrobble};
+use crate::scrobbler::{self, Report, Scrobbler};
 use crate::tray::Tray;
-use crate::{AppWindow, Row, covers, logos, radio};
+use crate::{AppWindow, Row, covers, library, logos, radio};
 
 /// The Radio tab's place among the views.
 pub const RADIO: usize = 2;
@@ -124,6 +127,18 @@ pub struct Player {
     pub media: Option<Media>,
     /// What the overlay was last told: None stopped, else playing or paused.
     pub media_state: Option<bool>,
+    /// Sends plays and loves to Last.fm and ListenBrainz (None if the database couldn't open).
+    pub scrobbler: Option<Scrobbler>,
+    /// The track being listened to, and how long it's actually been heard, for scrobbling.
+    pub listen: Option<Listen>,
+    pub last_tick: Instant,
+}
+
+/// A play being listened to: it's scrobbled once enough has been heard (see scrobble.rs).
+pub struct Listen {
+    play: Scrobble,
+    heard: Duration,
+    queued: bool,
 }
 
 fn take<T>(slot: &Mutex<Option<T>>) -> Option<T> {
@@ -408,6 +423,7 @@ impl Player {
         }
         ui.set_now_playing(now.into());
         self.update_media();
+        self.track_started(ui);
         ui.set_format_text(format.unwrap_or_default().into());
         ui.set_length(self.engine.length() as f32);
         self.show_state(ui);
@@ -518,8 +534,263 @@ impl Player {
         ui.set_time_text(time.into());
     }
 
+    /// A track (not radio) started: it may be scrobbled, and the heart shows whether it's loved.
+    fn track_started(&mut self, ui: &AppWindow) {
+        self.listen = None;
+        let (Some(db), Some((v, i))) = (&self.db, self.playing.filter(|p| p.0 != RADIO)) else {
+            ui.set_can_love(false);
+            return;
+        };
+        let services = scrobbler::connected(db);
+        let view = &self.views[v];
+        let Some(t) = view.lib.tracks.get(i) else {
+            return;
+        };
+        ui.set_can_love(!services.is_empty());
+        ui.set_loved(db.loved(&t.artist, &t.title) == Some(true));
+        if services.is_empty() {
+            return;
+        }
+        if let Some(s) = &self.scrobbler {
+            s.check_loved(&t.artist, &t.title);
+        }
+        if view.kind == Kind::Mixes && db.setting("scrobbleMixes").as_deref() == Some("0") {
+            return;
+        }
+        let duration = if t.duration_ms > 0 {
+            Duration::from_millis(t.duration_ms as u64)
+        } else {
+            Duration::from_secs_f64(self.engine.length().max(0.0))
+        };
+        if !scrobble::is_long_enough(duration) {
+            return;
+        }
+        let started_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64);
+        let play = Scrobble {
+            artist: t.artist.clone(),
+            title: t.title.clone(),
+            album: t.album_tag.clone(),
+            album_artist: t.album_artist_tag.clone(),
+            track_no: t.track_no,
+            duration,
+            started_at,
+        };
+        if let Some(s) = &self.scrobbler {
+            s.now_playing(play.clone());
+        }
+        self.listen = Some(Listen {
+            play,
+            heard: Duration::ZERO,
+            queued: false,
+        });
+    }
+
+    /// Counts time actually heard (not paused, not skipped), and queues the play once it's due.
+    fn count_listening(&mut self) {
+        let now = Instant::now();
+        // At most a second per tick, so a stall (a sleeping PC) doesn't count as listening.
+        let step = (now - self.last_tick).min(Duration::from_secs(1));
+        self.last_tick = now;
+        if !self.engine.is_playing() {
+            return;
+        }
+        let Some(listen) = self.listen.as_mut().filter(|l| !l.queued) else {
+            return;
+        };
+        listen.heard += step;
+        if !scrobble::is_due(listen.play.duration, listen.heard) {
+            return;
+        }
+        listen.queued = true;
+        let Some(db) = &self.db else { return };
+        for service in scrobbler::connected(db) {
+            let _ = db.add_scrobble(service, &listen.play);
+        }
+        if let Some(s) = &self.scrobbler {
+            s.flush();
+        }
+    }
+
+    /// The heart (or Ctrl+L): loves or un-loves the playing track, saved now and sent to every
+    /// connected service (now, or once they can be reached).
+    pub fn toggle_love(&mut self, ui: &AppWindow) {
+        let Some((v, i)) = self.playing.filter(|p| p.0 != RADIO) else {
+            return;
+        };
+        let Some(t) = self.views[v].lib.tracks.get(i) else {
+            return;
+        };
+        let Some(db) = &mut self.db else { return };
+        let services = scrobbler::connected(db);
+        if services.is_empty() {
+            return;
+        }
+        let loved = db.loved(&t.artist, &t.title) != Some(true);
+        let love = Love {
+            artist: t.artist.clone(),
+            title: t.title.clone(),
+            album: t.album_tag.clone(),
+            mbid: library::recording_mbid(Path::new(&t.path)),
+            loved,
+        };
+        if db.set_loved(&love, &services).is_ok() {
+            ui.set_loved(loved);
+            if let Some(s) = &self.scrobbler {
+                s.flush();
+            }
+        }
+    }
+
+    /// News from the scrobbler: plays sent, a love checked on Last.fm, a step in connecting.
+    pub fn scrobbler_report(&mut self, ui: &AppWindow) {
+        let Some(s) = &self.scrobbler else { return };
+        let reports = std::mem::take(&mut *s.reports.lock().unwrap_or_else(|e| e.into_inner()));
+        for report in reports {
+            match report {
+                Report::Sent => {}
+                Report::LovedChecked { artist, title } => {
+                    let playing = self
+                        .playing
+                        .filter(|p| p.0 != RADIO)
+                        .and_then(|(v, i)| self.views[v].lib.tracks.get(i));
+                    if let (Some(t), Some(db)) = (playing, &self.db)
+                        && t.artist == artist
+                        && t.title == title
+                    {
+                        ui.set_loved(db.loved(&artist, &title) == Some(true));
+                    }
+                }
+                Report::Connect {
+                    service,
+                    message,
+                    done,
+                } => {
+                    let mut account = if service == scrobbler::LASTFM {
+                        ui.get_lastfm()
+                    } else {
+                        ui.get_listenbrainz()
+                    };
+                    account.message = message.into();
+                    account.busy = !done;
+                    if service == scrobbler::LASTFM {
+                        ui.set_lastfm(account)
+                    } else {
+                        ui.set_listenbrainz(account)
+                    }
+                }
+            }
+        }
+        self.show_scrobbling(ui);
+    }
+
+    /// Fills in Settings' Scrobbling section from the saved logins, as 2.x shows them.
+    pub fn show_scrobbling(&self, ui: &AppWindow) {
+        let Some(db) = &self.db else { return };
+        let pending = match db.count_scrobbles() {
+            0 => String::new(),
+            1 => "1 play is waiting to be sent.".into(),
+            n => format!("{} plays are waiting to be sent.", rows::count(n)),
+        };
+        ui.set_pending(pending.into());
+        ui.set_scrobble_mixes(db.setting("scrobbleMixes").as_deref() != Some("0"));
+        let connected = scrobbler::connected(db);
+        for (service, name, what) in [
+            (scrobbler::LASTFM, "Last.fm", "login"),
+            (scrobbler::LISTENBRAINZ, "ListenBrainz", "token"),
+        ] {
+            let on = connected.contains(&service);
+            let user = db.setting(&format!("{service}.user")).unwrap_or_default();
+            let status = match (
+                on,
+                db.setting(&format!("{service}.reconnect")).as_deref() == Some("1"),
+            ) {
+                (true, true) => format!(
+                    "{name} stopped accepting the {what} for {user}. Disconnect and connect again."
+                ),
+                (true, false) => format!("Connected as {user}"),
+                (false, _) => String::new(),
+            };
+            let mut account = if service == scrobbler::LASTFM {
+                ui.get_lastfm()
+            } else {
+                ui.get_listenbrainz()
+            };
+            (account.connected, account.status) = (on, status.into());
+            if service == scrobbler::LASTFM {
+                ui.set_lastfm(account)
+            } else {
+                ui.set_listenbrainz(account)
+            }
+        }
+    }
+
+    pub fn set_scrobble_mixes(&self, on: bool) {
+        self.save("scrobbleMixes", if on { "1" } else { "0" });
+    }
+
+    pub fn lastfm_connect(&self, ui: &AppWindow) {
+        let (key, secret) = (
+            ui.get_lastfm_key().trim().to_string(),
+            ui.get_lastfm_secret().trim().to_string(),
+        );
+        let mut account = ui.get_lastfm();
+        if key.is_empty() || secret.is_empty() {
+            account.message = "Paste both the API key and the shared secret first.".into();
+            ui.set_lastfm(account);
+            return;
+        }
+        if let Some(s) = &self.scrobbler {
+            (account.message, account.busy) = ("Contacting Last.fm…".into(), true);
+            ui.set_lastfm(account);
+            s.connect_lastfm(key, secret, crate::window::open_url);
+        }
+    }
+
+    pub fn listenbrainz_connect(&self, ui: &AppWindow) {
+        let token = ui.get_listenbrainz_token().trim().to_string();
+        let mut account = ui.get_listenbrainz();
+        if token.is_empty() {
+            account.message = "Paste your user token first.".into();
+            ui.set_listenbrainz(account);
+            return;
+        }
+        if let Some(s) = &self.scrobbler {
+            (account.message, account.busy) = ("Checking…".into(), true);
+            ui.set_listenbrainz(account);
+            s.connect_listenbrainz(token);
+        }
+    }
+
+    /// Forgets a service's login (the key and secret stay, as in 2.x, for connecting again).
+    pub fn disconnect(&mut self, ui: &AppWindow, service: &str) {
+        let Some(db) = &self.db else { return };
+        let keys: &[&str] = if service == scrobbler::LASTFM {
+            &["lastfm.session", "lastfm.user"]
+        } else {
+            &["listenbrainz.token", "listenbrainz.user"]
+        };
+        for key in keys {
+            let _ = db.delete_setting(key);
+        }
+        let _ = db.set_setting(&format!("{service}.reconnect"), "0");
+        self.show_scrobbling(ui);
+        self.track_started_heart(ui);
+    }
+
+    /// The heart after connecting or disconnecting, without starting the play again.
+    pub fn track_started_heart(&self, ui: &AppWindow) {
+        let connected = self
+            .db
+            .as_ref()
+            .is_some_and(|d| !scrobbler::connected(d).is_empty());
+        ui.set_can_love(connected && self.playing.is_some_and(|p| p.0 != RADIO));
+    }
+
     /// Runs every few milliseconds: finishes fades, follows the gapless hand-over, notices the end.
     pub fn tick(&mut self, ui: &AppWindow) {
+        self.count_listening();
         if self.playing.is_some_and(|p| p.0 == RADIO) {
             self.tick_radio(ui);
             self.show_state(ui);

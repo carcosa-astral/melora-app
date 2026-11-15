@@ -3,6 +3,7 @@
 use rusqlite::{Connection, params};
 
 use crate::paths::{from_stored, to_stored};
+use crate::scrobble::{Love, Scrobble};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
@@ -232,6 +233,145 @@ impl Db {
         Ok(())
     }
 
+    // ---- Scrobble queue (one row per play per service, until it's been sent), as 2.x ----
+
+    pub fn add_scrobble(&self, service: &str, play: &Scrobble) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "INSERT INTO scrobbles (service, artist, title, album, album_artist, track_no, duration_ms, started_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                service,
+                play.artist,
+                play.title,
+                play.album,
+                play.album_artist,
+                play.track_no,
+                play.duration.as_millis() as i64,
+                play.started_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// The oldest queued plays for a service.
+    pub fn scrobbles(&self, service: &str, limit: usize) -> rusqlite::Result<Vec<(i64, Scrobble)>> {
+        let mut q = self.conn.prepare(
+            "SELECT id, artist, title, album, album_artist, track_no, duration_ms, started_at
+             FROM scrobbles WHERE service = ?1 ORDER BY started_at, id LIMIT ?2",
+        )?;
+        let rows = q.query_map(params![service, limit as i64], |r| {
+            Ok((
+                r.get(0)?,
+                Scrobble {
+                    artist: r.get(1)?,
+                    title: r.get(2)?,
+                    album: r.get(3)?,
+                    album_artist: r.get(4)?,
+                    track_no: r.get(5)?,
+                    duration: std::time::Duration::from_millis(r.get::<_, i64>(6)?.max(0) as u64),
+                    started_at: r.get(7)?,
+                },
+            ))
+        })?;
+        rows.collect()
+    }
+
+    pub fn delete_scrobbles(&mut self, ids: &[i64]) -> rusqlite::Result<()> {
+        let tx = self.conn.transaction()?;
+        for id in ids {
+            tx.execute("DELETE FROM scrobbles WHERE id = ?1", [id])?;
+        }
+        tx.commit()
+    }
+
+    pub fn count_scrobbles(&self) -> usize {
+        self.conn
+            .query_row("SELECT COUNT(*) FROM scrobbles", [], |r| r.get::<_, i64>(0))
+            .map_or(0, |n| n as usize)
+    }
+
+    // ---- Loves (one row per track; the queue holds services not told yet), as 2.x ----
+
+    /// Whether a track is loved; None if it's never been loved or un-loved.
+    pub fn loved(&self, artist: &str, title: &str) -> Option<bool> {
+        self.conn
+            .query_row(
+                "SELECT loved FROM loves WHERE artist = ?1 AND title = ?2",
+                [artist, title],
+                |r| r.get::<_, i64>(0),
+            )
+            .ok()
+            .map(|l| l != 0)
+    }
+
+    /// Loves or un-loves a track here, and queues telling each of `services`.
+    pub fn set_loved(&mut self, love: &Love, services: &[&str]) -> rusqlite::Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "INSERT INTO loves (artist, title, album, mbid, loved) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (artist, title) DO UPDATE SET album = excluded.album, mbid = excluded.mbid, loved = excluded.loved",
+            params![love.artist, love.title, love.album, love.mbid, love.loved as i64],
+        )?;
+        for service in services {
+            tx.execute(
+                "INSERT OR IGNORE INTO love_queue (service, artist, title) VALUES (?1, ?2, ?3)",
+                params![service, love.artist, love.title],
+            )?;
+        }
+        tx.commit()
+    }
+
+    /// Records what a service says about a track (loved on the Last.fm website, say), unless a
+    /// change made in Melora is still waiting to be sent.
+    pub fn sync_loved(&self, artist: &str, title: &str, loved: bool) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "INSERT INTO loves (artist, title, loved)
+             SELECT ?1, ?2, ?3
+             WHERE NOT EXISTS (SELECT 1 FROM love_queue WHERE artist = ?1 AND title = ?2)
+             ON CONFLICT (artist, title) DO UPDATE SET loved = excluded.loved",
+            params![artist, title, loved as i64],
+        )?;
+        Ok(())
+    }
+
+    /// Loves and un-loves a service still has to be told about.
+    pub fn pending_loves(&self, service: &str) -> rusqlite::Result<Vec<Love>> {
+        let mut q = self.conn.prepare(
+            "SELECT l.artist, l.title, l.album, l.mbid, l.loved
+             FROM love_queue q JOIN loves l ON l.artist = q.artist AND l.title = q.title
+             WHERE q.service = ?1",
+        )?;
+        let rows = q.query_map([service], |r| {
+            Ok(Love {
+                artist: r.get(0)?,
+                title: r.get(1)?,
+                album: r.get(2)?,
+                mbid: r.get(3)?,
+                loved: r.get::<_, i64>(4)? != 0,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn clear_pending_love(
+        &self,
+        service: &str,
+        artist: &str,
+        title: &str,
+    ) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "DELETE FROM love_queue WHERE service = ?1 AND artist = ?2 AND title = ?3",
+            [service, artist, title],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_setting(&self, key: &str) -> rusqlite::Result<()> {
+        self.conn
+            .execute("DELETE FROM settings WHERE key = ?1", [key])?;
+        Ok(())
+    }
+
     /// A setting as 2.x stores it (key and text value), or None when it was never set.
     pub fn setting(&self, key: &str) -> Option<String> {
         self.conn
@@ -349,6 +489,59 @@ mod tests {
                 "http://a/gsc".to_string()
             )]
         );
+    }
+
+    #[test]
+    fn the_scrobble_queue_keeps_order_per_service() {
+        let mut d = db();
+        let play = |t: &str, at: i64| Scrobble {
+            artist: "A".into(),
+            title: t.into(),
+            album: None,
+            album_artist: None,
+            track_no: 0,
+            duration: std::time::Duration::from_secs(200),
+            started_at: at,
+        };
+        d.add_scrobble("lastfm", &play("late", 20)).expect("add");
+        d.add_scrobble("lastfm", &play("early", 10)).expect("add");
+        d.add_scrobble("listenbrainz", &play("other", 5))
+            .expect("add");
+        let queued = d.scrobbles("lastfm", 50).expect("read");
+        assert_eq!(
+            queued
+                .iter()
+                .map(|(_, p)| p.title.as_str())
+                .collect::<Vec<_>>(),
+            ["early", "late"]
+        );
+        assert_eq!(queued[0].1.duration.as_secs(), 200);
+        d.delete_scrobbles(&[queued[0].0]).expect("delete");
+        assert_eq!(d.count_scrobbles(), 2);
+    }
+
+    #[test]
+    fn loves_queue_per_service_and_a_pending_change_wins_over_a_sync() {
+        let mut d = db();
+        let love = Love {
+            artist: "Ana".into(),
+            title: "Song".into(),
+            album: None,
+            mbid: None,
+            loved: true,
+        };
+        d.set_loved(&love, &["lastfm", "listenbrainz"])
+            .expect("love");
+        assert_eq!(d.loved("ana", "SONG"), Some(true)); // matched ignoring case, as in 2.x
+        d.sync_loved("Ana", "Song", false).expect("sync"); // still waiting to be sent: ignored
+        assert_eq!(d.loved("Ana", "Song"), Some(true));
+        assert_eq!(d.pending_loves("lastfm").expect("pending").len(), 1);
+        d.clear_pending_love("lastfm", "Ana", "Song")
+            .expect("clear");
+        d.clear_pending_love("listenbrainz", "Ana", "Song")
+            .expect("clear");
+        d.sync_loved("Ana", "Song", false).expect("sync"); // nothing pending: taken
+        assert_eq!(d.loved("Ana", "Song"), Some(false));
     }
 
     #[test]

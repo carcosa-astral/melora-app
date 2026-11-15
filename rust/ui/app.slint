@@ -7,9 +7,9 @@ import { Theme } from "theme.slint";
 import { IconButton, TabButton, TextButton, ThinSlider } from "controls.slint";
 import { Row, TrackList } from "track_list.slint";
 import { Button } from "std-widgets.slint";
-import { ConfirmPanel, MenuItem, SettingsPanel, StationEditor } from "dialogs.slint";
+import { Account, ConfirmPanel, MenuItem, SettingsPanel, StationEditor } from "dialogs.slint";
 
-export { Row }
+export { Row, Account }
 
 export component AppWindow inherits Window {
     title: window-title;
@@ -71,6 +71,16 @@ export component AppWindow inherits Window {
     in-out property <bool> online-art;
     in property <string> version;
     in property <string> settings-note;
+    in-out property <bool> scrobble-mixes;
+    in property <string> pending;
+    in property <Account> lastfm;
+    in property <Account> listenbrainz;
+    in-out property <string> lastfm-key;
+    in-out property <string> lastfm-secret;
+    in-out property <string> listenbrainz-token;
+    // The heart: shown while a track (not radio) plays and a scrobbling service is connected.
+    in property <bool> can-love;
+    in property <bool> loved;
     property <int> menu-row: -1;
     property <length> menu-x;
     property <length> menu-y;
@@ -79,6 +89,14 @@ export component AppWindow inherits Window {
     callback add-folder(int);
     callback remove-folder(int, string);
     callback open-settings();
+    callback toggle-love();
+    callback scrobble-mixes-changed(bool);
+    callback lastfm-connect();
+    callback lastfm-disconnect();
+    callback listenbrainz-connect();
+    callback listenbrainz-disconnect();
+    // The scrobbler has news (sent plays, a love checked, a connect step).
+    callback scrobbler-report();
     callback minimize-to-tray-changed(bool);
     callback online-art-changed(bool);
     callback add-station();
@@ -128,6 +146,8 @@ export component AppWindow inherits Window {
             if (e.text == " ") { toggle-play(); return accept; }
             if (e.modifiers.control && e.text == Key.LeftArrow) { previous(); return accept; }
             if (e.modifiers.control && e.text == Key.RightArrow) { next(); return accept; }
+            // Ctrl+L loves, as in 2.x (0x0C is how some keyboards send it).
+            if (e.modifiers.control && (e.text == "l" || e.text == "L" || e.text == "\u{0C}")) { toggle-love(); return accept; }
             // Some keyboards send Ctrl+Q as the control character 0x11 rather than "q".
             if (e.modifiers.control && (e.text == "q" || e.text == "Q" || e.text == "\u{11}")) { quit(); return accept; }
             reject
@@ -183,6 +203,14 @@ export component AppWindow inherits Window {
                         vertical-alignment: center;
                     }
                     Rectangle { width: 12px; }
+                    if can-love: IconButton {
+                        glyph: loved ? "\u{EB52}" : "\u{EB51}";
+                        label: loved ? "Loved, un-love" : "Love";
+                        active: loved;
+                        muted: true;
+                        size: 34px;
+                        clicked => { toggle-love(); }
+                    }
                     IconButton {
                         glyph: "\u{E8B1}";
                         label: shuffle ? "Shuffle, on" : "Shuffle, off";
@@ -415,6 +443,18 @@ export component AppWindow inherits Window {
         online-art <=> online-art;
         version: version;
         note: settings-note;
+        scrobble-mixes <=> scrobble-mixes;
+        pending: pending;
+        lastfm: lastfm;
+        listenbrainz: listenbrainz;
+        lastfm-key <=> lastfm-key;
+        lastfm-secret <=> lastfm-secret;
+        listenbrainz-token <=> listenbrainz-token;
+        scrobble-mixes-changed(on) => { scrobble-mixes-changed(on); }
+        lastfm-connect => { lastfm-connect(); }
+        lastfm-disconnect => { lastfm-disconnect(); }
+        listenbrainz-connect => { listenbrainz-connect(); }
+        listenbrainz-disconnect => { listenbrainz-disconnect(); }
         add-folder(k) => { add-folder(k); }
         remove-folder(k, path) => { remove-folder(k, path); }
         export-stations => { export-stations(); }

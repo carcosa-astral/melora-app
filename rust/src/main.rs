@@ -14,6 +14,8 @@ mod player;
 mod queue;
 mod radio;
 mod rows;
+mod scrobble;
+mod scrobbler;
 mod tray;
 mod watch;
 mod window;
@@ -24,7 +26,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use db::{Db, Kind};
 use engine::Engine;
@@ -191,6 +193,15 @@ fn main() -> Result<(), slint::PlatformError> {
         minimize_to_tray: to_tray,
         media: None,
         media_state: None,
+        // The scrobbler has its own connection to the database, on its own thread.
+        scrobbler: db.is_ok().then(|| {
+            let weak = ui.as_weak();
+            scrobbler::Scrobbler::new(db_file.clone(), base.clone(), move || {
+                let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_scrobbler_report());
+            })
+        }),
+        listen: None,
+        last_tick: Instant::now(),
         // Tray clicks and menu choices arrive off to the side; hand them to the window's thread.
         tray: tray::Tray::new({
             let weak = ui.as_weak();
@@ -307,8 +318,27 @@ fn main() -> Result<(), slint::PlatformError> {
         ui.set_online_art(p.logo_loader.is_some());
         ui.set_version(concat!("Melora ", env!("CARGO_PKG_VERSION")).into());
         ui.set_settings_note("".into());
+        if let Some(db) = &p.db {
+            ui.set_lastfm_key(db.setting("lastfm.apiKey").unwrap_or_default().into());
+            ui.set_lastfm_secret(db.setting("lastfm.secret").unwrap_or_default().into());
+        }
+        p.show_scrobbling(&ui);
         ui.set_settings_open(true);
     });
+    // Scrobbling and loves.
+    on!(on_toggle_love, |p, ui| p.toggle_love(&ui));
+    on!(on_scrobbler_report, |p, ui| {
+        p.scrobbler_report(&ui);
+        p.track_started_heart(&ui)
+    });
+    on!(on_scrobble_mixes_changed, |p, _ui, on| p
+        .set_scrobble_mixes(on));
+    on!(on_lastfm_connect, |p, ui| p.lastfm_connect(&ui));
+    on!(on_listenbrainz_connect, |p, ui| p.listenbrainz_connect(&ui));
+    on!(on_lastfm_disconnect, |p, ui| p
+        .disconnect(&ui, scrobbler::LASTFM));
+    on!(on_listenbrainz_disconnect, |p, ui| p
+        .disconnect(&ui, scrobbler::LISTENBRAINZ));
     on!(on_minimize_to_tray_changed, |p, _ui, on| p
         .set_minimize_to_tray(on));
     let (file, b) = (db_file.clone(), base.clone());

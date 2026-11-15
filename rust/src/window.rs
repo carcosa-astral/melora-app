@@ -48,6 +48,12 @@ pub fn tray_balloon(class: &str, id: u32, title: &str, text: &str) -> bool {
     win::tray_balloon(class, id, title, text)
 }
 
+/// Opens a web page in the default browser.
+pub fn open_url(url: &str) {
+    // shortcut: Windows only (explorer hands it to the browser); macOS and Linux would use open and xdg-open.
+    let _ = std::process::Command::new("explorer").arg(url).spawn();
+}
+
 /// Brings the window back from the tray (or the taskbar) and to the front.
 pub fn show(window: &slint::Window) {
     if let Some(h) = hwnd(window) {

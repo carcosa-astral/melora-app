@@ -50,7 +50,13 @@ Phase 4, in progress:
 - Done: the Windows media overlay and media keys, as in 2.x: title, artist, album and cover (the
   album's, a station's logo, or Melora's icon), playing or paused with the position, and
   Play/Pause, Next, Previous and seeking from the overlay or the keyboard's media keys.
-- Next: scrobbling and loves, then Discord.
+- Done: scrobbling and loves, as in 2.x. Last.fm (your own API key, approved in the browser) and
+  ListenBrainz (your user token), connected in Settings. A play counts after half of it or 4
+  minutes; tracks of 30 seconds or less and radio don't count; mixes count unless turned off.
+  Plays wait in the database's queue while offline and go out in batches, retried every 5
+  minutes. The heart (or Ctrl+L) loves a track on both, and Last.fm says if it was loved on its
+  website. Logins are 2.x's settings, so a 2.x data folder stays connected.
+- Next: Discord.
 
 Covers have 6 px rounded corners and DJ pictures are round, as in 2.x. The rounding is baked into
 the picture when it's shrunk, because Slint's software renderer doesn't round a cropped image.
@@ -92,6 +98,8 @@ cargo build --release
 | `src/rows.rs` | The list's rows (headings and tracks), their positions, and keyboard steps |
 | `src/window.rs` | The dark title bar, and hiding to and coming back from the tray (Windows) |
 | `src/tray.rs` | The tray icon and its menu |
+| `src/scrobble.rs` | When a play counts, and the requests Last.fm and ListenBrainz take |
+| `src/scrobbler.rs` | Sending plays and loves, and connecting accounts, on a worker thread |
 | `src/media.rs` | The Windows media overlay and media keys |
 | `ui/app.slint` | The window |
 | `ui/track_list.slint` | The library list |
@@ -117,6 +125,7 @@ Approved by Griff on 2026-11-15 for the 3.0 rewrite, when the no-crates rule was
 | `tray-icon` | The notification-area icon and its menu. Approved 2026-11-15 for phase 4 |
 | `winresource` (build only) | Puts Melora's icon into the exe. Approved 2026-11-15 for phase 4 |
 | `souvlaki` | The Windows media overlay and media keys (and their macOS and Linux versions). Approved 2026-11-15 for phase 4 |
+| `md5` | Last.fm signs every request with an MD5. Approved 2026-11-15 for phase 4 |
 | `rusqlite` (bundled SQLite) | The library database, in 2.x's layout. Approved 2026-11-15 for phase 2 |
 | BASS (DLLs, not a crate) | All playback, as in 2.x |
 

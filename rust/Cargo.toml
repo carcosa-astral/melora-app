@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 lofty = "0.25.5"
+md5 = "0.8.1"
 notify = "8.2.2"
 raw-window-handle = "0.6"
 rfd = "0.18.0"
