@@ -10,6 +10,7 @@ mod folder;
 mod library;
 mod paths;
 mod player;
+mod queue;
 mod rows;
 
 use std::cell::RefCell;
@@ -24,6 +25,7 @@ use db::{Db, Kind};
 use engine::Engine;
 use library::Library;
 use player::{Player, View};
+use queue::{Queue, Repeat};
 use slint::{ComponentHandle, Timer, TimerMode, VecModel};
 
 slint::include_modules!();
@@ -98,11 +100,28 @@ fn main() -> Result<(), slint::PlatformError> {
     let model = Rc::new(VecModel::default());
     ui.set_rows(model.clone().into());
 
+    // Opened first: settings and the library are both in it.
+    let db = Db::open(&db_file, &base);
+    let setting = |key: &str| db.as_ref().ok().and_then(|d| d.setting(key));
+    let shuffle = setting("shuffle").as_deref() == Some("1");
+    let repeat = setting("repeat")
+        .and_then(|r| Repeat::parse(&r))
+        .unwrap_or(Repeat::All);
+    let volume = setting("volume")
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(1.0)
+        .clamp(0.0, 1.0);
+
+    let mut engine = Engine::new();
+    engine.set_volume(volume);
+    ui.set_volume(volume * 100.0);
     let player = Rc::new(RefCell::new(Player {
-        engine: Engine::new(),
+        engine,
         views: KINDS.map(View::new),
         tab: 0,
         playing: None,
+        queue: Queue::new(shuffle, repeat),
+        db: None,
         model,
         covers: HashMap::new(),
         pending: HashSet::new(),
@@ -118,23 +137,22 @@ fn main() -> Result<(), slint::PlatformError> {
         ui.set_track_detail(format!("Sound couldn't start: {e}").into());
     }
 
+    player.borrow().show_settings(&ui);
+
     // What's already in the database shows at once; the scan then catches up with the disk.
-    let db = match Db::open(&db_file, &base) {
+    match db {
         Ok(db) => {
             for (i, kind) in KINDS.into_iter().enumerate() {
                 if let Ok(lib) = load(&db, kind, &base) {
                     player.borrow_mut().set_library(&ui, i, lib);
                 }
             }
-            Some(db)
+            player.borrow_mut().db = Some(db);
         }
-        Err(e) => {
-            ui.set_summary(format!("Couldn't open the library ({e})").into());
-            None
-        }
-    };
+        Err(e) => ui.set_summary(format!("Couldn't open the library ({e})").into()),
+    }
     let scanner = Arc::new(Scanner::default());
-    if db.is_some() {
+    if player.borrow().db.is_some() {
         start_scan(&scanner, &ui, db_file.clone(), base.clone());
     }
 
@@ -162,6 +180,11 @@ fn main() -> Result<(), slint::PlatformError> {
     on!(on_move_selection, |p, ui, steps| p
         .move_selection(&ui, steps));
     on!(on_covers_ready, |p, ui| p.covers_ready(&ui));
+    on!(on_toggle_shuffle, |p, ui| p.toggle_shuffle(&ui));
+    on!(on_cycle_repeat, |p, ui| p.cycle_repeat(&ui));
+    on!(on_volume_changed, |p, _ui, v| p
+        .engine
+        .set_volume(v / 100.0));
     on!(
         on_show_tab,
         |p, ui, tab| if let Ok(t) = usize::try_from(tab) {
@@ -199,10 +222,10 @@ fn main() -> Result<(), slint::PlatformError> {
         base.clone(),
     );
     ui.on_add_folder(move || {
-        let (Some(ui), Some(db)) = (weak.upgrade(), db.as_ref()) else {
-            return;
-        };
-        let kind = KINDS[p.borrow().tab];
+        let Some(ui) = weak.upgrade() else { return };
+        let p = p.borrow();
+        let Some(db) = p.db.as_ref() else { return };
+        let kind = KINDS[p.tab];
         let title = if kind == Kind::Music {
             "Add a music folder"
         } else {
@@ -234,5 +257,7 @@ fn main() -> Result<(), slint::PlatformError> {
             backdrop::apply(ui.window());
         }
     });
-    slint::run_event_loop()
+    let result = slint::run_event_loop();
+    player.borrow().save_volume(&ui);
+    result
 }

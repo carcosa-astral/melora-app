@@ -319,7 +319,6 @@ impl Engine {
     }
 
     /// Volume from 0 to 1, kept across tracks.
-    #[allow(dead_code)] // wired to the UI with the full transport in phase 2
     pub fn set_volume(&mut self, v: f32) {
         self.volume = v.clamp(0.0, 1.0);
         // Not while paused or fading: the volume is faded to 0 then, and `resume` fades in to the new level.

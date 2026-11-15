@@ -35,6 +35,11 @@ export component AppWindow inherits Window {
     in property <string> summary;
     // 0 Music, 1 Mixes.
     in property <int> tab;
+    in property <bool> shuffle;
+    // 0 off, 1 all, 2 one.
+    in property <int> repeat;
+    // 0 to 100.
+    in-out property <float> volume: 100;
     // While the seek bar is being dragged, playback mustn't move it back.
     out property <bool> seeking: seek-bar.dragging;
 
@@ -44,6 +49,11 @@ export component AppWindow inherits Window {
     callback previous();
     callback next();
     callback seek(float);
+    callback toggle-shuffle();
+    callback cycle-repeat();
+    callback volume-changed(float);
+
+    changed volume => { volume-changed(volume); }
     callback activate(int);
     callback move-selection(int);
     // A background scan has a new library waiting.
@@ -120,6 +130,38 @@ export component AppWindow inherits Window {
                     vertical-alignment: center;
                     horizontal-alignment: right;
                     min-width: 96px;
+                }
+                Rectangle { width: 8px; }
+                IconButton {
+                    glyph: "\u{E8B1}";
+                    label: shuffle ? "Shuffle, on" : "Shuffle, off";
+                    active: shuffle;
+                    size: 36px;
+                    clicked => { toggle-shuffle(); }
+                }
+                IconButton {
+                    glyph: repeat == 2 ? "\u{E8ED}" : "\u{E8EE}";
+                    label: repeat == 0 ? "Repeat, off" : repeat == 1 ? "Repeat all" : "Repeat one";
+                    active: repeat != 0;
+                    size: 36px;
+                    clicked => { cycle-repeat(); }
+                }
+                Text {
+                    text: volume == 0 ? "\u{E74F}" : "\u{E767}";
+                    font-family: "Segoe Fluent Icons";
+                    font-size: 15px;
+                    color: Theme.dim;
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+                ThinSlider {
+                    width: 96px;
+                    horizontal-stretch: 0;
+                    maximum: 100;
+                    value <=> volume;
+                    small-step: 5;
+                    large-step: 20;
+                    label: "Volume";
                 }
             }
 

@@ -154,6 +154,23 @@ impl Db {
         rows.collect()
     }
 
+    /// A setting as 2.x stores it (key and text value), or None when it was never set.
+    pub fn setting(&self, key: &str) -> Option<String> {
+        self.conn
+            .query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| {
+                r.get(0)
+            })
+            .ok()
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )?;
+        Ok(())
+    }
+
     /// Saves what a scan found, all or nothing.
     pub fn save_scan(
         &mut self,
@@ -236,6 +253,15 @@ mod tests {
             [r"C:\Users\me\Music"]
         );
         assert!(d.folders(Kind::Mixes).expect("folders").is_empty());
+    }
+
+    #[test]
+    fn settings_save_and_overwrite() {
+        let d = db();
+        assert_eq!(d.setting("volume"), None);
+        d.set_setting("volume", "0.5").expect("set");
+        d.set_setting("volume", "0.8").expect("set");
+        assert_eq!(d.setting("volume").as_deref(), Some("0.8"));
     }
 
     #[test]

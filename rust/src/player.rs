@@ -7,9 +7,10 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, VecModel};
 
-use crate::db::Kind;
+use crate::db::{Db, Kind};
 use crate::engine::Engine;
 use crate::library::Library;
+use crate::queue::{Info, Queue, Repeat};
 use crate::rows::{self, ListRow, RowKind};
 use crate::{AppWindow, Row, covers};
 
@@ -40,6 +41,18 @@ impl View {
         self.lib.tracks.get(track).map(|t| t.path.clone())
     }
 
+    /// What the shuffle needs to know about each track.
+    fn queue_info(&self) -> Vec<Info> {
+        self.lib
+            .tracks
+            .iter()
+            .map(|t| Info {
+                artist: t.artist.to_lowercase(),
+                album: t.album,
+            })
+            .collect()
+    }
+
     /// The track on a list row, if the row is a track.
     fn track_at(&self, row: i32) -> Option<usize> {
         usize::try_from(row)
@@ -56,6 +69,10 @@ pub struct Player {
     pub tab: usize,
     /// What's playing (or paused): the view it's in and its track there.
     pub playing: Option<(usize, usize)>,
+    /// The play order through the playing view.
+    pub queue: Queue,
+    /// Where settings are kept (None if the database couldn't be opened).
+    pub db: Option<Db>,
     /// Only the rows in view (see `refresh_view`).
     pub model: Rc<VecModel<Row>>,
     /// Covers and DJ pictures near the view, by their sample track (None: there's none).
@@ -117,6 +134,9 @@ impl Player {
         };
         if let Some(path) = playing {
             self.playing = find(Some(path)).map(|i| (which, i));
+            // The list changed, so the play order starts again from the playing track.
+            let info = view.queue_info();
+            self.queue.start(info, self.playing.map(|p| p.1));
         }
         view.selected = find(selected).map_or(-1, |i| view.track_rows[i] as i32);
 
@@ -154,17 +174,27 @@ impl Player {
         self.show_view(ui);
     }
 
-    /// Plays track `i` of a view, skipping any that can't be opened.
+    /// Starts a run through a view's list at track `i` (in order or shuffled).
     pub fn play_at(&mut self, ui: &AppWindow, which: usize, i: usize) {
-        for j in i..self.views[which].lib.tracks.len() {
+        let info = self.views[which].queue_info();
+        self.queue.start(info, Some(i));
+        self.play_current(ui, which);
+    }
+
+    /// Plays the queue's current track, moving on past any that can't be opened.
+    fn play_current(&mut self, ui: &AppWindow, which: usize) {
+        let mut track = self.queue.current();
+        for _ in 0..self.views[which].lib.tracks.len() {
+            let Some(t) = track else { break };
             if self
                 .engine
-                .play(Path::new(&self.views[which].lib.tracks[j].path))
+                .play(Path::new(&self.views[which].lib.tracks[t].path))
             {
-                self.set_playing(ui, Some((which, j)));
+                self.set_playing(ui, Some((which, t)));
                 self.queue_next();
                 return;
             }
+            track = self.queue.next(true);
         }
         self.engine.stop();
         self.set_playing(ui, None);
@@ -177,9 +207,11 @@ impl Player {
         if !self.engine.is_loaded() {
             return;
         }
-        let next = self
-            .playing
-            .and_then(|(v, i)| self.views[v].lib.tracks.get(i + 1));
+        let next = self.playing.and_then(|(v, _)| {
+            self.queue
+                .peek_next()
+                .and_then(|i| self.views[v].lib.tracks.get(i))
+        });
         self.engine.set_next(next.map(|t| Path::new(&t.path)));
     }
 
@@ -292,22 +324,19 @@ impl Player {
         ui.set_time_text(time.into());
     }
 
-    /// The track after the playing one, in its own view.
-    fn after_playing(&self) -> Option<(usize, usize)> {
-        self.playing
-            .map(|(v, i)| (v, i + 1))
-            .filter(|&(v, i)| i < self.views[v].lib.tracks.len())
-    }
-
     /// Runs every few milliseconds: finishes fades, follows the gapless hand-over, notices the end.
     pub fn tick(&mut self, ui: &AppWindow) {
         if self.engine.tick() {
-            self.set_playing(ui, self.after_playing());
+            // The gapless hand-over happened: the queue moves on to what was lined up.
+            let next = self
+                .playing
+                .and_then(|(v, _)| self.queue.next(false).map(|t| (v, t)));
+            self.set_playing(ui, next);
             self.queue_next();
         } else if self.engine.has_ended() {
             // The last track, or the next one couldn't be opened: try what's after it.
-            match self.after_playing() {
-                Some((v, i)) => self.play_at(ui, v, i),
+            match self.playing.zip(self.queue.next(false)) {
+                Some(((v, _), _)) => self.play_current(ui, v),
                 None => {
                     self.engine.stop();
                     self.set_playing(ui, None);
@@ -331,18 +360,57 @@ impl Player {
     }
 
     pub fn next(&mut self, ui: &AppWindow) {
-        if let Some((v, i)) = self.after_playing() {
-            self.play_at(ui, v, i);
+        if let Some((v, _)) = self.playing
+            && self.queue.next(true).is_some()
+        {
+            self.play_current(ui, v);
         }
     }
 
-    /// Back a track, or to the start of this one when there's no track before it.
+    /// Back a track, or to the start of this one when it's the first.
     pub fn previous(&mut self, ui: &AppWindow) {
-        match self.playing {
-            Some((v, i)) if i > 0 => self.play_at(ui, v, i - 1),
-            Some(_) => self.engine.seek(0.0),
-            None => {}
+        let Some((v, i)) = self.playing else { return };
+        if self.queue.previous() == Some(i) {
+            self.engine.seek(0.0);
+        } else {
+            self.play_current(ui, v);
         }
+    }
+
+    fn save(&self, key: &str, value: &str) {
+        // A setting that can't be saved just isn't remembered next time.
+        if let Some(db) = &self.db {
+            let _ = db.set_setting(key, value);
+        }
+    }
+
+    /// Shows the shuffle, repeat and volume settings (read at startup).
+    pub fn show_settings(&self, ui: &AppWindow) {
+        ui.set_shuffle(self.queue.shuffle);
+        ui.set_repeat(match self.queue.repeat {
+            Repeat::Off => 0,
+            Repeat::All => 1,
+            Repeat::One => 2,
+        });
+    }
+
+    pub fn toggle_shuffle(&mut self, ui: &AppWindow) {
+        self.queue.set_shuffle(!self.queue.shuffle);
+        self.save("shuffle", if self.queue.shuffle { "1" } else { "0" });
+        self.show_settings(ui);
+        self.queue_next();
+    }
+
+    pub fn cycle_repeat(&mut self, ui: &AppWindow) {
+        self.queue.repeat = self.queue.repeat.cycled();
+        self.save("repeat", self.queue.repeat.name());
+        self.show_settings(ui);
+        self.queue_next();
+    }
+
+    /// Saved when Melora closes rather than on every step of the slider (as 2.x does).
+    pub fn save_volume(&self, ui: &AppWindow) {
+        self.save("volume", &format!("{}", ui.get_volume() / 100.0));
     }
 
     pub fn move_selection(&mut self, ui: &AppWindow, steps: i32) {

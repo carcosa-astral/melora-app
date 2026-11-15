@@ -111,6 +111,8 @@ export component IconButton inherits Rectangle {
     in property <string> label;
     in property <length> size: 40px;
     in property <bool> enabled: true;
+    // A switch that's on (shuffle, repeat) shows its glyph in the accent colour.
+    in property <bool> active;
     callback clicked();
     width: size;
     height: size;
@@ -138,7 +140,7 @@ export component IconButton inherits Rectangle {
         text: glyph;
         font-family: "Segoe Fluent Icons";
         font-size: size * 0.45;
-        color: Theme.text;
+        color: active ? Theme.accent : Theme.text;
     }
 }
 
