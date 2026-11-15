@@ -112,10 +112,17 @@ impl Player {
     }
 
     fn show_state(&self, ui: &AppWindow) {
-        let (pos, len) = (self.engine.position(), self.engine.length());
+        let len = self.engine.length();
         ui.set_loaded(self.engine.is_loaded());
         ui.set_playing(self.engine.is_playing());
-        ui.set_position(pos as f32);
+        // While the seek bar is dragged it leads, and the time shows where it would land.
+        let pos = if ui.get_seeking() {
+            f64::from(ui.get_position())
+        } else {
+            let pos = self.engine.position();
+            ui.set_position(pos as f32);
+            pos
+        };
         let time = if self.engine.is_loaded() {
             format!("{} / {}", clock(pos), clock(len))
         } else {

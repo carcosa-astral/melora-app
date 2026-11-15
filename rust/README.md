@@ -8,7 +8,8 @@ everything 2.x does. The plan and phases are in the main [README](../README.md#r
 Phase 1, in progress. Open a folder (or pass one, or a file in it: `melora.exe "D:\Music\Album"`)
 and its tracks, subfolders included, play in order A–Z without gaps, using the 2.x engine ported to
 Rust: one output stream fed from each track's decoder, with BASSmix converting a track in another
-sample rate or channel layout. Previous, Play/Pause (150 ms fades), Next and a seek bar. Double-click
+sample rate or channel layout. Previous, Play/Pause (150 ms fades), Next and a seek bar of our own like 2.x's (click to jump,
+drag, arrows 5 s, Page Up/Down 30 s, a focus ring only for keyboard focus). Double-click
 or Enter plays a row, Space plays and pauses, Ctrl+Left/Right skip. Tracks that can't be opened are
 skipped.
 
@@ -19,11 +20,10 @@ Measured (release build, software renderer): 8.9 MB for the exe and BASS DLLs, a
 memory, window up in well under a second.
 
 Still to do in phase 1:
-- Clicking the seek bar moves it one step instead of jumping there (Slint's standard slider). A
-  slider of our own fixes this and the keyboard steps from 2.x.
 - Mica: the window shows the solid fallback colour. The software renderer draws an opaque window;
   Slint's OpenGL renderer could be transparent but used about 50 MB more memory here.
-- Listening to a gapless join on real music in the app (only the tests check it so far).
+- Listening closely to a join between two tracks that run into each other (the hand-over itself
+  is checked in the app and by the tests).
 
 ## Building
 

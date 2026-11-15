@@ -1,7 +1,7 @@
 // Melora 3.0, phase 1: a folder's tracks, played in order without gaps. Colours and fonts match 2.x.
 import "fonts/IBMPlexSans-Regular.ttf";
 import "fonts/IBMPlexSans-SemiBold.ttf";
-import { Slider, StandardListView } from "std-widgets.slint";
+import { StandardListView } from "std-widgets.slint";
 
 global Theme {
     out property <color> background: #17171A;
@@ -10,6 +10,112 @@ global Theme {
     out property <color> accent: #9BB0FF;
     out property <color> hover: #FFFFFF0E;
     out property <color> divider: #FFFFFF14;
+    out property <color> track: #FFFFFF26;
+}
+
+// 2.x's thin slider: clicking jumps to the spot, dragging follows the mouse, and the arrow keys
+// (small-step) and Page Up/Down (large-step) move it. `committed` fires on release and on each key.
+component ThinSlider {
+    in property <float> minimum: 0;
+    in property <float> maximum: 1;
+    in-out property <float> value;
+    in property <float> small-step: 1;
+    in property <float> large-step: 10;
+    in property <bool> enabled: true;
+    in property <string> label;
+    out property <bool> dragging: touch.pressed;
+    callback committed(float);
+
+    property <float> span: max(maximum - minimum, 0.0001);
+    property <float> fraction: clamp((value - minimum) / span, 0, 1);
+    // The track is inset by half the thumb, so it spans exactly the thumb's travel.
+    property <length> travel: self.width - 12px;
+
+    min-height: 20px;
+    min-width: 60px;
+    horizontal-stretch: 1;
+    opacity: enabled ? 1 : 0.4;
+    accessible-role: slider;
+    accessible-label: label;
+    accessible-value: round(value);
+    accessible-value-minimum: minimum;
+    accessible-value-maximum: maximum;
+    accessible-value-step: small-step;
+    accessible-action-increment => { step(small-step); }
+    accessible-action-decrement => { step(-small-step); }
+
+    function set-from(x: length) {
+        value = clamp(minimum + (x - 6px) / travel * span, minimum, maximum);
+    }
+    function step(by: float) {
+        if (!enabled) { return; }
+        value = clamp(value + by, minimum, maximum);
+        committed(value);
+    }
+
+    // The ring shows for keyboard focus only, as in 2.x, not after a click.
+    property <bool> ring;
+    Rectangle {
+        border-width: ring && focus.has-focus ? 2px : 0;
+        border-color: Theme.accent;
+        border-radius: 7px;
+    }
+    Rectangle {
+        x: 6px;
+        width: travel;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.track;
+    }
+    Rectangle {
+        x: 6px;
+        width: travel * fraction;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.accent;
+    }
+    Rectangle {
+        x: travel * fraction;
+        width: 12px;
+        height: 12px;
+        border-radius: 6px;
+        background: Theme.text;
+        opacity: enabled && (touch.has-hover || touch.pressed || focus.has-focus) ? 1 : 0;
+    }
+    // Under the TouchArea, so clicks reach the TouchArea (which then takes focus itself).
+    focus := FocusScope {
+        enabled: root.enabled;
+        focus-gained(reason) => {
+            ring = reason == FocusReason.tab-navigation;
+        }
+        key-pressed(e) => {
+            ring = true;
+            if (e.modifiers.control) { return reject; } // Ctrl+arrows skip tracks
+            if (e.text == Key.LeftArrow || e.text == Key.DownArrow) { step(-small-step); return accept; }
+            if (e.text == Key.RightArrow || e.text == Key.UpArrow) { step(small-step); return accept; }
+            if (e.text == Key.PageDown) { step(-large-step); return accept; }
+            if (e.text == Key.PageUp) { step(large-step); return accept; }
+            if (e.text == Key.Home) { step(minimum - value); return accept; }
+            if (e.text == Key.End) { step(maximum - value); return accept; }
+            reject
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.button != PointerEventButton.left) { return; }
+            if (e.kind == PointerEventKind.down) {
+                focus.focus();
+                set-from(self.mouse-x);
+            } else if (e.kind == PointerEventKind.up) {
+                committed(value);
+            }
+        }
+        moved => {
+            if (self.pressed) { set-from(self.mouse-x); }
+        }
+    }
 }
 
 component IconButton inherits Rectangle {
@@ -67,6 +173,8 @@ export component AppWindow inherits Window {
     in property <string> time-text;
     in property <[StandardListViewItem]> tracks;
     in-out property <int> selected: -1;
+    // While the seek bar is being dragged, playback mustn't move it back.
+    out property <bool> seeking: seek-bar.dragging;
 
     callback open-folder();
     callback toggle-play();
@@ -135,13 +243,14 @@ export component AppWindow inherits Window {
                     enabled: loaded;
                     clicked => { next(); }
                 }
-                Slider {
+                seek-bar := ThinSlider {
                     enabled: loaded;
-                    minimum: 0;
                     maximum: max(length, 1);
                     value <=> position;
-                    accessible-label: "Position";
-                    released(v) => { seek(v); }
+                    small-step: 5;
+                    large-step: 30;
+                    label: "Position";
+                    committed(v) => { seek(v); }
                 }
                 Text {
                     text: time-text;
