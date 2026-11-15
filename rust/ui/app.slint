@@ -58,6 +58,8 @@ export component AppWindow inherits Window {
     callback move-selection(int);
     // A background scan has a new library waiting.
     callback library-ready();
+    // Something changed in a library folder.
+    callback rescan();
     callback list-view-changed();
     // Covers have been loaded in the background.
     callback covers-ready();

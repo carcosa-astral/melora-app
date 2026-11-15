@@ -21,7 +21,10 @@ Phase 2, in progress:
   (the folder under the mixes folder), oldest first, with the DJ's picture (from their first mix,
   as in 2.x) and "12 mixes · 9h 30m · 2014–2025". A mixes folder inside the music folder only
   shows in Mixes. The first scan of 1,370 mixes took about 3 seconds.
-- Next: folder watching, shuffle and repeat.
+- Done: shuffle (2.x's spread shuffle: no artist or album twice running when it can be helped),
+  repeat off/all/one, and volume, saved under 2.x's setting names (volume when Melora closes).
+- Done: folder watching. Adding, removing, renaming or retagging music rescans by itself once
+  changes settle for 2 seconds, as in 2.x.
 
 Covers have 6 px rounded corners and DJ pictures are round, as in 2.x. The rounding is baked into
 the picture when it's shrunk, because Slint's software renderer doesn't round a cropped image.
@@ -56,6 +59,8 @@ cargo build --release
 | `src/library.rs` | Scanning folders and grouping tracks into albums and DJs, with 2.x's rules |
 | `src/covers.rs` | Finding album covers and shrinking them on a worker thread |
 | `src/player.rs` | The two libraries, the tab on screen, and what's playing |
+| `src/queue.rs` | The play order: in order or shuffled, and repeat |
+| `src/watch.rs` | Watching library folders for changes |
 | `src/rows.rs` | The list's rows (headings and tracks), their positions, and keyboard steps |
 | `src/backdrop.rs` | Dark title bar on Windows |
 | `ui/app.slint` | The window |
@@ -76,6 +81,7 @@ Approved by Griff on 2026-11-15 for the 3.0 rewrite, when the no-crates rule was
 | `slint-build` | Compiles `ui/*.slint` at build time |
 | `lofty` | Reads tags and embedded covers (2.x used TagLibSharp). Approved 2026-11-15 for phase 2 |
 | `image` (JPEG and PNG only) | Decodes and shrinks covers. Slint already uses the same version. Approved 2026-11-15 for phase 2 |
+| `notify` | Watches library folders for changes. Approved 2026-11-15 for phase 2 |
 | `rusqlite` (bundled SQLite) | The library database, in 2.x's layout. Approved 2026-11-15 for phase 2 |
 | BASS (DLLs, not a crate) | All playback, as in 2.x |
 

@@ -12,6 +12,7 @@ mod paths;
 mod player;
 mod queue;
 mod rows;
+mod watch;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -93,6 +94,16 @@ fn start_scan(scanner: &Arc<Scanner>, ui: &AppWindow, db_file: PathBuf, base: St
     });
 }
 
+/// Watches every library folder, asking the window for a rescan when changes settle.
+fn watch_folders(db: &Db, ui: &AppWindow) -> Option<watch::Watch> {
+    let mut folders = db.folders(Kind::Music).ok()?;
+    folders.extend(db.folders(Kind::Mixes).ok()?);
+    let weak = ui.as_weak();
+    Some(watch::watch(&folders, move || {
+        let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_rescan());
+    }))
+}
+
 fn main() -> Result<(), slint::PlatformError> {
     let base = paths::base_dir().to_string_lossy().into_owned();
     let db_file = paths::data_dir().join("melora.db");
@@ -152,9 +163,18 @@ fn main() -> Result<(), slint::PlatformError> {
         Err(e) => ui.set_summary(format!("Couldn't open the library ({e})").into()),
     }
     let scanner = Arc::new(Scanner::default());
-    if player.borrow().db.is_some() {
+    let watching = Rc::new(RefCell::new(None));
+    if let Some(db) = &player.borrow().db {
         start_scan(&scanner, &ui, db_file.clone(), base.clone());
+        *watching.borrow_mut() = watch_folders(db, &ui);
     }
+
+    let (weak, s, file, b) = (ui.as_weak(), scanner.clone(), db_file.clone(), base.clone());
+    ui.on_rescan(move || {
+        if let Some(ui) = weak.upgrade() {
+            start_scan(&s, &ui, file.clone(), b.clone());
+        }
+    });
 
     // Wires a UI callback to the player, with the window passed in.
     macro_rules! on {
@@ -214,12 +234,13 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });
 
-    let (weak, p, s, file, b) = (
+    let (weak, p, s, file, b, w) = (
         ui.as_weak(),
         player.clone(),
         scanner.clone(),
         db_file.clone(),
         base.clone(),
+        watching.clone(),
     );
     ui.on_add_folder(move || {
         let Some(ui) = weak.upgrade() else { return };
@@ -235,7 +256,10 @@ fn main() -> Result<(), slint::PlatformError> {
             return;
         };
         match db.add_folder(kind, &dir.to_string_lossy()) {
-            Ok(()) => start_scan(&s, &ui, file.clone(), b.clone()),
+            Ok(()) => {
+                start_scan(&s, &ui, file.clone(), b.clone());
+                *w.borrow_mut() = watch_folders(db, &ui);
+            }
             Err(e) => ui.set_summary(format!("Couldn't add the folder ({e})").into()),
         }
     });
