@@ -1,0 +1,128 @@
+// Melora 3.0 proof: one track, play and pause with fades, seek. Colours and fonts match Melora 2.x.
+import "fonts/IBMPlexSans-Regular.ttf";
+import "fonts/IBMPlexSans-SemiBold.ttf";
+import { Slider } from "std-widgets.slint";
+
+global Theme {
+    out property <color> fallback: #17171A;
+    out property <color> bar: #FFFFFF0C;
+    out property <color> text: #ECECEF;
+    out property <color> dim: #8E8E96;
+    out property <color> accent: #9BB0FF;
+    out property <color> hover: #FFFFFF0E;
+}
+
+component IconButton inherits Rectangle {
+    in property <string> glyph;
+    in property <string> label;
+    callback clicked();
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    background: touch.has-hover ? Theme.hover : transparent;
+    border-width: focus.has-focus ? 2px : 0;
+    border-color: Theme.accent;
+    accessible-role: button;
+    accessible-label: label;
+    accessible-action-default => { clicked(); }
+    focus := FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Return) { clicked(); return accept; }
+            reject
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { clicked(); }
+    }
+    Text {
+        text: glyph;
+        font-family: "Segoe Fluent Icons";
+        font-size: 20px;
+        color: Theme.text;
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "Melora";
+    preferred-width: 560px;
+    preferred-height: 230px;
+    min-width: 380px;
+    min-height: 200px;
+    default-font-family: "IBM Plex Sans";
+    default-font-size: 13px;
+
+    in property <bool> mica;
+    in property <string> track-title: "Nothing playing";
+    in property <string> track-detail: "Open a file to start";
+    in property <bool> playing;
+    in property <bool> loaded;
+    in property <float> length;
+    in-out property <float> position;
+    in property <string> time-text;
+
+    callback open-file();
+    callback toggle-play();
+    callback seek(float);
+
+    background: mica ? transparent : Theme.fallback;
+
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(e) => {
+            if (e.text == " ") { toggle-play(); return accept; }
+            reject
+        }
+    }
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 6px;
+        alignment: start;
+
+        Text {
+            text: track-title;
+            font-size: 20px;
+            font-weight: 600;
+            color: Theme.text;
+            overflow: elide;
+        }
+        Text {
+            text: track-detail;
+            color: Theme.dim;
+            overflow: elide;
+        }
+        Rectangle { height: 14px; }
+
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: stretch;
+            IconButton {
+                glyph: "\u{E8E5}";
+                label: "Open file";
+                clicked => { open-file(); }
+            }
+            IconButton {
+                glyph: playing ? "\u{E769}" : "\u{E768}";
+                label: playing ? "Pause" : "Play";
+                clicked => { toggle-play(); }
+            }
+            Slider {
+                enabled: loaded;
+                minimum: 0;
+                maximum: max(length, 1);
+                value <=> position;
+                accessible-label: "Position";
+                released(v) => { seek(v); }
+                vertical-stretch: 0;
+            }
+            Text {
+                text: time-text;
+                color: Theme.dim;
+                vertical-alignment: center;
+                min-width: 84px;
+                horizontal-alignment: right;
+            }
+        }
+    }
+}

@@ -16,3 +16,6 @@ data/
 # OS
 Thumbs.db
 Desktop.ini
+
+# Rust build output
+target/

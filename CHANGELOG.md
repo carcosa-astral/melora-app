@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+- Started Melora 3.0, a rebuild in Rust, in the `rust/` folder. A first proof plays one file through
+  BASS with the 150 ms fades, in a Slint window using Melora's colours and font: an 8.9 MB folder
+  (exe and BASS) using about 21 MB of memory. It isn't part of the 2.x download.
+
 ## [2.0.0] - 2026-11-04
 
 Smoother playback, radio logos, and a keyboard and screen-reader pass.
