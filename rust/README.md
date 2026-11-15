@@ -44,6 +44,9 @@ cargo build --release
 | `src/bass.rs` | Our own small bindings to BASS and BASSmix (only the calls Melora uses) |
 | `src/engine.rs` | Gapless playback and fades, ported from 2.x's AudioEngine, with its tests |
 | `src/folder.rs` | The audio files in a folder, sorted |
+| `src/paths.rs` | Where data lives, and paths stored like 2.x (no drive letter on Melora's own drive) |
+| `src/db.rs` | `data\melora.db`, in exactly 2.x's tables |
+| `src/library.rs` | Scanning folders and grouping tracks into albums and DJs, with 2.x's rules |
 | `src/backdrop.rs` | Dark title bar on Windows |
 | `ui/app.slint` | The window |
 | `build.rs` | Compiles the UI, copies the BASS DLLs |
@@ -58,6 +61,8 @@ Approved by Griff on 2026-11-15 for the 3.0 rewrite, when the no-crates rule was
 | `rfd` | The Windows folder picker |
 | `raw-window-handle` | To reach the native window (dark title bar) |
 | `slint-build` | Compiles `ui/*.slint` at build time |
+| `lofty` | Reads tags and embedded covers (2.x used TagLibSharp). Approved 2026-11-15 for phase 2 |
+| `rusqlite` (bundled SQLite) | The library database, in 2.x's layout. Approved 2026-11-15 for phase 2 |
 | BASS (DLLs, not a crate) | All playback, as in 2.x |
 
 ## Design

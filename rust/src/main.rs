@@ -3,8 +3,14 @@
 
 mod backdrop;
 mod bass;
+#[allow(dead_code)] // wired to the Music screen in the next step of phase 2
+mod db;
 mod engine;
 mod folder;
+#[allow(dead_code)]
+mod library;
+#[allow(dead_code)]
+mod paths;
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};

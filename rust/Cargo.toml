@@ -7,8 +7,10 @@ license = "MIT"
 publish = false
 
 [dependencies]
+lofty = "0.25.5"
 raw-window-handle = "0.6"
 rfd = "0.18.0"
+rusqlite = { version = "0.43.0", features = ["bundled"] }
 slint = { version = "1.18.1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-software", "accessibility", "raw-window-handle-06"] }
 
 [build-dependencies]
