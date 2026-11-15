@@ -9,8 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Started Melora 3.0, a rebuild in Rust, in the `rust/` folder. A first proof plays one file through
   BASS with the 150 ms fades, in a Slint window using Melora's colours and font: an 8.9 MB folder
   (exe and BASS) using about 21 MB of memory. It isn't part of the 2.x download.
-- Melora 3.0 phase 1 (in progress): it plays a folder in order without gaps, using the 2.x engine
-  ported to Rust with its tests, with Previous, Next and the usual keys.
+- Melora 3.0 phases 1 to 3 (not released): gapless playback with the 2.x engine ported to Rust;
+  the Music and Mixes libraries (scanning, covers, DJ pictures, shuffle, repeat, volume, folder
+  watching) in 2.x's database layout; and Radio (stations, live titles, logos, import and export).
 
 ### Changed
 - Melora 3.0 gets its own look: Nord, deepened for contrast, in solid colours. It drops 2.x's Mica

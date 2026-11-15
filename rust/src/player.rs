@@ -14,7 +14,7 @@ use crate::engine::Engine;
 use crate::library::Library;
 use crate::queue::{Info, Queue, Repeat};
 use crate::rows::{self, ListRow, RowKind};
-use crate::{AppWindow, Row, covers, radio};
+use crate::{AppWindow, Row, covers, logos, radio};
 
 /// The Radio tab's place among the views.
 pub const RADIO: usize = 2;
@@ -109,6 +109,11 @@ pub struct Player {
     pub editing: Option<i64>,
     /// The station waiting for the delete to be confirmed.
     pub deleting: Option<usize>,
+    /// Station logos by station address (None: it has none). Few stations, so all are kept.
+    pub logos: HashMap<String, Option<slint::Image>>,
+    pub logos_pending: HashSet<String>,
+    /// None when looking things up online is turned off.
+    pub logo_loader: Option<logos::Loader>,
 }
 
 fn take<T>(slot: &Mutex<Option<T>>) -> Option<T> {
@@ -288,6 +293,22 @@ impl Player {
                     }
                 }
             }
+            if view.rows[r].kind == RowKind::Station
+                && let Some(station) = view.rows[r].track.and_then(|i| self.stations.get(i))
+            {
+                match self.logos.get(&station.url) {
+                    Some(Some(logo)) => (row.art, row.has_art) = (logo.clone(), true),
+                    Some(None) => {}
+                    None => {
+                        if let Some(loader) = &self.logo_loader
+                            && self.logos_pending.insert(station.url.clone())
+                        {
+                            let px = (rows::LOGO_SIZE * scale).round() as u32;
+                            loader.request(&station.url, &station.name, px);
+                        }
+                    }
+                }
+            }
             shown.push(row);
         }
         self.model.set_vec(shown);
@@ -295,6 +316,19 @@ impl Player {
         if self.covers.len() > 40 {
             self.covers.retain(|k, _| keys.contains(k));
         }
+    }
+
+    /// Takes in the station logos found online and shows them.
+    pub fn logos_ready(&mut self, ui: &AppWindow) {
+        let Some(loader) = &self.logo_loader else {
+            return;
+        };
+        let done = std::mem::take(&mut *loader.done.lock().unwrap_or_else(|e| e.into_inner()));
+        for (url, logo) in done {
+            self.logos_pending.remove(&url);
+            self.logos.insert(url, logo.map(slint::Image::from_rgba8));
+        }
+        self.refresh_view(ui);
     }
 
     /// Takes in the pictures the loader has finished and shows them.

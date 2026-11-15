@@ -188,6 +188,27 @@ impl Db {
         Ok(())
     }
 
+    /// A cached online lookup as 2.x keeps it: the address found (None: nothing was found) and
+    /// when it was checked (Unix seconds). None if it was never looked up.
+    pub fn cover(&self, key: &str) -> Option<(Option<String>, i64)> {
+        self.conn
+            .query_row(
+                "SELECT url, checked_at FROM covers WHERE key = ?1",
+                [key],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .ok()
+    }
+
+    pub fn set_cover(&self, key: &str, url: Option<&str>, checked_at: i64) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "INSERT INTO covers (key, url, checked_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT (key) DO UPDATE SET url = excluded.url, checked_at = excluded.checked_at",
+            params![key, url, checked_at],
+        )?;
+        Ok(())
+    }
+
     /// A setting as 2.x stores it (key and text value), or None when it was never set.
     pub fn setting(&self, key: &str) -> Option<String> {
         self.conn

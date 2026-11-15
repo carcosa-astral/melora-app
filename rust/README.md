@@ -9,7 +9,7 @@ Phase 1 is done: gapless playback with the 2.x engine ported to Rust (one output
 each track's decoder, BASSmix for other sample rates and mono), 150 ms fades, and a seek bar of our
 own (click to jump, drag, arrows 5 s, Page Up/Down 30 s).
 
-Phase 2, in progress:
+Phase 2 is done:
 - Done: the library. Folders are scanned in the background into `data\melora.db` (2.x's tables,
   2.x's path rules and timestamps), and the Music screen lists albums with their discs and tracks.
   Add a folder with the button next to "Music". Arrow keys, Page Up/Down, Home/End, Enter and
@@ -25,6 +25,17 @@ Phase 2, in progress:
   repeat off/all/one, and volume, saved under 2.x's setting names (volume when Melora closes).
 - Done: folder watching. Adding, removing, renaming or retagging music rescans by itself once
   changes settle for 2 seconds, as in 2.x.
+
+Phase 3 is done:
+- A Radio tab with your stations. Add one with the + button: paste the address (.pls, .m3u and HLS
+  .m3u8 work too), Check reads the name the station gives itself, then Save. F2 edits, Del deletes
+  (after asking), and right-click has Play, Edit and Delete.
+- Stations connect in the background and show what they're playing (ICY titles, or Ogg comments).
+  Play stops a station with a fade and tunes in again.
+- The ⋯ button exports your stations to an .m3u file and imports one, skipping stations you
+  already have. Same files as 2.x.
+- Station logos from Radio Browser, by the station's address or else its name, cached under 2.x's
+  keys (found ones kept, misses tried again after a week). They follow 2.x's "online" setting.
 
 Covers have 6 px rounded corners and DJ pictures are round, as in 2.x. The rounding is baked into
 the picture when it's shrunk, because Slint's software renderer doesn't round a cropped image.
@@ -61,10 +72,13 @@ cargo build --release
 | `src/player.rs` | The two libraries, the tab on screen, and what's playing |
 | `src/queue.rs` | The play order: in order or shuffled, and repeat |
 | `src/watch.rs` | Watching library folders for changes |
+| `src/radio.rs` | Stream titles and headers, pasted addresses, and .m3u station files |
+| `src/logos.rs` | Station logos from Radio Browser |
 | `src/rows.rs` | The list's rows (headings and tracks), their positions, and keyboard steps |
 | `src/backdrop.rs` | Dark title bar on Windows |
 | `ui/app.slint` | The window |
 | `ui/track_list.slint` | The library list |
+| `ui/dialogs.slint` | The station panel, delete confirmation and menus |
 | `ui/controls.slint` | Icon buttons and the seek bar |
 | `ui/theme.slint` | The Nord colours |
 | `build.rs` | Compiles the UI, copies the BASS DLLs |
@@ -82,6 +96,7 @@ Approved by Griff on 2026-11-15 for the 3.0 rewrite, when the no-crates rule was
 | `lofty` | Reads tags and embedded covers (2.x used TagLibSharp). Approved 2026-11-15 for phase 2 |
 | `image` (JPEG and PNG only) | Decodes and shrinks covers. Slint already uses the same version. Approved 2026-11-15 for phase 2 |
 | `notify` | Watches library folders for changes. Approved 2026-11-15 for phase 2 |
+| `ureq`, `serde_json` | Asking Radio Browser for station logos, and reading its answers. Approved 2026-11-15 for phase 3 |
 | `rusqlite` (bundled SQLite) | The library database, in 2.x's layout. Approved 2026-11-15 for phase 2 |
 | BASS (DLLs, not a crate) | All playback, as in 2.x |
 

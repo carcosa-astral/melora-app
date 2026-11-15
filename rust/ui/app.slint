@@ -71,6 +71,8 @@ export component AppWindow inherits Window {
     // A station connected (or failed), or a check of an address finished, in the background.
     callback station-connected();
     callback probe-done();
+    // Station logos found online.
+    callback logos-ready();
     callback show-tab(int);
     callback toggle-play();
     callback previous();

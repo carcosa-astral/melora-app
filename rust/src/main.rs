@@ -8,6 +8,7 @@ mod db;
 mod engine;
 mod folder;
 mod library;
+mod logos;
 mod paths;
 mod player;
 mod queue;
@@ -151,6 +152,15 @@ fn main() -> Result<(), slint::PlatformError> {
         checked: Arc::default(),
         editing: None,
         deleting: None,
+        logos: HashMap::new(),
+        logos_pending: HashSet::new(),
+        // Online lookups follow 2.x's "Find missing covers, DJ pictures and station logos online".
+        logo_loader: (setting("onlineArt").as_deref() != Some("0")).then(|| {
+            let weak = ui.as_weak();
+            logos::Loader::new(db_file.clone(), base.clone(), move || {
+                let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_logos_ready());
+            })
+        }),
     }));
 
     if let Err(e) = bass::init(-1, &paths::base_dir()) {
@@ -224,6 +234,7 @@ fn main() -> Result<(), slint::PlatformError> {
     on!(on_editor_save, |p, ui| p.editor_save(&ui));
     on!(on_station_connected, |p, ui| p.station_connected(&ui));
     on!(on_probe_done, |p, ui| p.probe_done(&ui));
+    on!(on_logos_ready, |p, ui| p.logos_ready(&ui));
     on!(on_import_stations, |p, ui| {
         let picked = rfd::FileDialog::new()
             .set_title("Import stations")
