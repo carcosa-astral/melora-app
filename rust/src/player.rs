@@ -364,6 +364,7 @@ impl Player {
     pub fn refresh_view(&mut self, ui: &AppWindow) {
         let view = &self.views[self.tab];
         let range = rows::in_view(&view.rows, ui.get_list_scroll(), ui.get_list_view_height());
+        ui.set_first_row(range.start as i32);
         let playing = self
             .playing
             .filter(|p| p.0 == self.tab)

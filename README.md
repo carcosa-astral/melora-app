@@ -182,11 +182,11 @@ lib/bass/         Native BASS libraries (x64)
 9. ~~**1.3, pictures and getting around**: missing album covers and DJ pictures found online, jump to now playing, type to jump~~
 10. ~~**2.0**: fades on pause and stop, gapless across sample rates, station logos, backing up stations, DJ heading details, "Open log", a keyboard and screen-reader pass~~
 11. **3.0, Rust**: the same Melora rebuilt in Rust (Slint for the window, BASS still for sound), being built in [`rust/`](rust/README.md) while 2.x keeps shipping from `src/`. Nothing new; the only things dropped are Mica and the cover-tinted accent, for a solid Nord look. Phases, each ending in something that runs:
-    1. Plays music: window, BASS, a folder with gapless and fades (a first proof plays one file)
-    2. Library: scanning, tags, albums, DJs, covers, the list screens
-    3. Radio: stations, logos, live song info, import and export
-    4. Connected: scrobbling, loves, Discord, tray, media keys and overlay
-    5. Polish: online covers, type to jump, update check, settings, keyboard and screen readers
+    1. ~~Plays music: window, BASS, a folder with gapless and fades (a first proof plays one file)~~
+    2. ~~Library: scanning, tags, albums, DJs, covers, the list screens~~
+    3. ~~Radio: stations, logos, live song info, import and export~~
+    4. ~~Connected: scrobbling, loves, Discord, tray, media keys and overlay~~
+    5. ~~Polish: online covers, type to jump, update check, settings, keyboard and screen readers~~
     6. Ship 3.0.0: data carried over from 2.x; `src/` and the C# tests are removed
 
 See [CHANGELOG.md](CHANGELOG.md) for what has shipped.

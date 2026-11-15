@@ -64,6 +64,20 @@ Phase 4:
 
 Phase 4 is done.
 
+Phase 5 is done:
+- The log, `data\melora.log`, as 2.x: skipped files, unreadable tags, missing folders, stations
+  that won't tune in or drop, refused scrobbles, Discord trouble, unexpected errors. Rolls over at
+  1 MB keeping five. "Open log" in Settings.
+- Covers and DJ pictures found online for albums and DJs without one, saved in `data\covers`
+  under 2.x's file names (so the two share them). They follow the online setting.
+- Type to jump (artists, DJs or stations; the same letter again steps on) and jump to now playing
+  (Ctrl+J, or click what's playing in the status bar).
+- The update check: GitHub, at most once a day, with a link; nothing is downloaded.
+- Keyboard and screen readers: every control can be reached with Tab and has a name; screen
+  readers follow the selected row; closing a panel puts the keyboard back in the list.
+
+Next: phase 6, switching to the real data folder and shipping 3.0.0.
+
 Covers have 6 px rounded corners and DJ pictures are round, as in 2.x. The rounding is baked into
 the picture when it's shrunk, because Slint's software renderer doesn't round a cropped image.
 
@@ -106,6 +120,8 @@ cargo build --release
 | `src/rows.rs` | The list's rows (headings and tracks), their positions, and keyboard steps |
 | `src/window.rs` | The dark title bar, and hiding to and coming back from the tray (Windows) |
 | `src/tray.rs` | The tray icon and its menu |
+| `src/log.rs` | The log in the data folder |
+| `src/update.rs` | The update check |
 | `src/scrobble.rs` | When a play counts, and the requests Last.fm and ListenBrainz take |
 | `src/scrobbler.rs` | Sending plays and loves, and connecting accounts, on a worker thread |
 | `src/media.rs` | The Windows media overlay and media keys |

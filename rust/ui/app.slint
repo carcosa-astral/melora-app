@@ -37,6 +37,7 @@ export component AppWindow inherits Window {
     // The rows in view, and the whole list's size (see TrackList).
     in property <[Row]> rows;
     in property <int> row-count;
+    in property <int> first-row;
     in property <length> list-height;
     in-out property <int> selected: -1;
     in-out property <length> list-scroll <=> list.scroll-y;
@@ -164,6 +165,11 @@ export component AppWindow inherits Window {
     callback media-command(int, float);
 
     forward-focus: list;
+
+    // When a panel closes, the keyboard carries on in the list.
+    changed settings-open => { if (!settings-open) { list.focus(); } }
+    changed editor-open => { if (!editor-open) { list.focus(); } }
+    changed confirm-open => { if (!confirm-open) { list.focus(); } }
 
     // Keys the focused control doesn't use itself end up here.
     FocusScope {
@@ -366,6 +372,7 @@ export component AppWindow inherits Window {
                 vertical-stretch: 1;
                 rows: rows;
                 count: row-count;
+                first-row: first-row;
                 total-height: list-height;
                 view-changed => { list-view-changed(); }
                 selected <=> selected;

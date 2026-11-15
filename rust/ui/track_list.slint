@@ -284,6 +284,9 @@ export component TrackList inherits FocusScope {
     in property <[Row]> rows;
     in property <int> count;
     in property <length> total-height;
+    // The list position of the first row in `rows`, so screen readers can be pointed at the
+    // selected row among the ones that exist.
+    in property <int> first-row;
     in-out property <int> selected: -1;
     // How far down the list is scrolled (0 at the top), read and set by Rust.
     in-out property <length> scroll-y;
@@ -327,6 +330,8 @@ export component TrackList inherits FocusScope {
         accessible-role: list;
         accessible-label: root.label;
         accessible-item-count: root.count;
+        // Screen readers follow the selected row as the arrow keys move it.
+        accessible-delegate-focus: root.selected - root.first-row;
 
         for row in root.rows: RowView {
             x: 0;
