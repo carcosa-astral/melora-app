@@ -1,0 +1,151 @@
+// In-window panels: adding or editing a radio station, confirming a delete, and small menus.
+// They cover the window in its own background colour (solid, no see-through scrim).
+import { Button, LineEdit } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+component Panel inherits Rectangle {
+    callback cancel();
+    background: Theme.background;
+    // Clicks don't reach the list underneath.
+    TouchArea { }
+    FocusScope {
+        key-pressed(e) => {
+            if (e.text == Key.Escape) { cancel(); return accept; }
+            reject
+        }
+        Rectangle {
+            width: min(500px, root.width - 32px);
+            height: body.preferred-height;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Theme.divider;
+            background: Theme.panel;
+            body := VerticalLayout {
+                padding: 24px;
+                spacing: 10px;
+                @children
+            }
+        }
+    }
+}
+
+// Add or edit a station: paste the address, Check it (which also reads the name the station
+// gives itself), name it, Save. As in 2.x's station window.
+export component StationEditor inherits Panel {
+    in property <string> heading;
+    in-out property <string> url;
+    in-out property <string> name;
+    in property <string> status;
+    in property <bool> status-is-error;
+    in property <bool> busy;
+    callback check();
+    callback save();
+
+    Text {
+        text: heading;
+        font-size: 18px;
+        font-weight: 600;
+        color: Theme.text;
+    }
+    Text {
+        text: "Stream address";
+        color: Theme.dim;
+    }
+    HorizontalLayout {
+        spacing: 8px;
+        url-edit := LineEdit {
+            text <=> root.url;
+            placeholder-text: "Paste an address (.pls, .m3u and HLS .m3u8 work too)";
+            accessible-label: "Stream address";
+            accepted => { check(); }
+        }
+        Button {
+            text: busy ? "Checking…" : "Check";
+            enabled: !busy;
+            clicked => { check(); }
+        }
+    }
+    Text {
+        text: status;
+        color: status-is-error ? Theme.error : Theme.dim;
+        wrap: word-wrap;
+    }
+    Text {
+        text: "Name";
+        color: Theme.dim;
+    }
+    LineEdit {
+        text <=> root.name;
+        accessible-label: "Name";
+        accepted => { save(); }
+    }
+    HorizontalLayout {
+        alignment: end;
+        spacing: 8px;
+        padding-top: 6px;
+        Button {
+            text: "Cancel";
+            clicked => { root.cancel(); }
+        }
+        Button {
+            text: "Save";
+            primary: true;
+            clicked => { save(); }
+        }
+    }
+
+    init => { url-edit.focus(); }
+}
+
+// "Delete Groove Salad?" with Delete and Cancel.
+export component ConfirmPanel inherits Panel {
+    in property <string> message;
+    in property <string> action: "Delete";
+    callback confirm();
+
+    Text {
+        text: message;
+        font-size: 16px;
+        font-weight: 600;
+        color: Theme.text;
+        wrap: word-wrap;
+    }
+    HorizontalLayout {
+        alignment: end;
+        spacing: 8px;
+        padding-top: 6px;
+        cancel-button := Button {
+            text: "Cancel";
+            clicked => { root.cancel(); }
+        }
+        Button {
+            text: action;
+            primary: true;
+            clicked => { confirm(); }
+        }
+    }
+
+    init => { cancel-button.focus(); }
+}
+
+// A line in a small popup menu.
+export component MenuItem inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    height: 30px;
+    min-width: 160px;
+    border-radius: 4px;
+    background: touch.has-hover ? Theme.divider : transparent;
+    accessible-role: button;
+    accessible-label: text;
+    accessible-action-default => { clicked(); }
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+    Text {
+        x: 12px;
+        text: root.text;
+        color: Theme.text;
+        vertical-alignment: center;
+    }
+}

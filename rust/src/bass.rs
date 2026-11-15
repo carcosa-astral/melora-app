@@ -17,6 +17,12 @@ pub const STREAMPROC_END: u32 = 0x8000_0000;
 pub const MIXER_END: u32 = 0x1_0000; // the mixer ends when its source does
 pub const MIXER_CHAN_NORAMPIN: u32 = 0x80_0000; // no fade-in at the join
 const CONFIG_DEV_DEFAULT: u32 = 36;
+const CONFIG_NET_PLAYLIST: u32 = 21;
+// Tag kinds for BASS_ChannelGetTags.
+pub const TAGS_OGG: u32 = 2;
+pub const TAGS_HTTP: u32 = 3;
+pub const TAGS_ICY: u32 = 4;
+pub const TAGS_META: u32 = 5;
 const ATTRIB_VOL: u32 = 2;
 const POS_BYTE: u32 = 0;
 const ERROR_ALREADY: i32 = 14;
@@ -70,6 +76,14 @@ unsafe extern "system" {
     fn BASS_ChannelSetAttribute(handle: Handle, attrib: u32, value: f32) -> i32;
     fn BASS_ChannelSlideAttribute(handle: Handle, attrib: u32, value: f32, time: u32) -> i32;
     fn BASS_ChannelGetData(handle: Handle, buffer: *mut c_void, length: u32) -> u32;
+    fn BASS_StreamCreateURL(
+        url: *const u16,
+        offset: u32,
+        flags: u32,
+        proc_: *const c_void,
+        user: *mut c_void,
+    ) -> Handle;
+    fn BASS_ChannelGetTags(handle: Handle, tags: u32) -> *const u8;
 }
 
 #[link(name = "bassmix", kind = "raw-dylib")]
@@ -106,7 +120,15 @@ pub fn init(device: i32, dir: &Path) -> Result<(), String> {
                     ));
                 }
                 // bass_aac decodes AAC itself; without it BASS falls back to Media Foundation, which is slow.
-                for plugin in ["bassflac.dll", "bassopus.dll", "bass_aac.dll"] {
+                // Let pasted .pls / .m3u station links resolve to the stream inside them.
+                BASS_SetConfig(CONFIG_NET_PLAYLIST, 1);
+                // basshls plays HLS (.m3u8) radio such as the BBC's.
+                for plugin in [
+                    "bassflac.dll",
+                    "bassopus.dll",
+                    "bass_aac.dll",
+                    "basshls.dll",
+                ] {
                     if BASS_PluginLoad(wide(&dir.join(plugin)).as_ptr(), UNICODE) == 0
                         && error_code() != ERROR_ALREADY
                     {
@@ -231,6 +253,55 @@ pub fn read(h: Handle, buffer: &mut [u8]) -> usize {
     // SAFETY: BASS writes at most `len` bytes into the buffer we pass.
     let got = unsafe { BASS_ChannelGetData(h, buffer.as_mut_ptr().cast(), buffer.len() as u32) };
     if got == DATA_ERROR { 0 } else { got as usize }
+}
+
+/// Connects to an internet stream (blocking, so call it off the UI thread). The stream starts
+/// buffering but not playing. On failure, a sentence saying why.
+pub fn open_url(url: &str, decode_only: bool) -> Result<Handle, String> {
+    let wide: Vec<u16> = url.encode_utf16().chain([0]).collect();
+    let flags = UNICODE | SAMPLE_FLOAT | if decode_only { STREAM_DECODE } else { 0 };
+    // SAFETY: the URL is a valid NUL-terminated wide string for the call; no download callback.
+    let h = unsafe {
+        BASS_StreamCreateURL(
+            wide.as_ptr(),
+            0,
+            flags,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+        )
+    };
+    if h != 0 {
+        return Ok(h);
+    }
+    // The same sentences as 2.x.
+    Err(match error_code() {
+        40 => "The station didn't answer in time.".into(),
+        2 => "Couldn't connect to that address.".into(),
+        41 | 44 => "That address isn't an audio stream Melora can play.".into(),
+        32 => "No internet connection.".into(),
+        10 => "The secure connection failed.".into(),
+        47 => "That stream can't be played live.".into(),
+        e => format!("Couldn't play the stream (BASS error {e})."),
+    })
+}
+
+/// A channel's tags of one kind, as lines. ICY, HTTP and Ogg tags are a list; META is one line.
+pub fn tags(h: Handle, kind: u32) -> Vec<String> {
+    // SAFETY: BASS returns a pointer to tags it owns (or null), valid until the channel changes;
+    // we copy them out at once, reading each NUL-terminated string and stopping at an empty one.
+    unsafe {
+        let mut p = BASS_ChannelGetTags(h, kind);
+        let mut out = Vec::new();
+        while !p.is_null() && *p != 0 {
+            let s = std::ffi::CStr::from_ptr(p.cast());
+            out.push(String::from_utf8_lossy(s.to_bytes()).into_owned());
+            if kind == TAGS_META {
+                break;
+            }
+            p = p.add(s.to_bytes().len() + 1);
+        }
+        out
+    }
 }
 
 /// A short codec name for BASS's channel type.

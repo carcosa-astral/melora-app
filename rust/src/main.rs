@@ -11,6 +11,7 @@ mod library;
 mod paths;
 mod player;
 mod queue;
+mod radio;
 mod rows;
 mod watch;
 
@@ -25,7 +26,7 @@ use std::time::Duration;
 use db::{Db, Kind};
 use engine::Engine;
 use library::Library;
-use player::{Player, View};
+use player::{Player, Station, View};
 use queue::{Queue, Repeat};
 use slint::{ComponentHandle, Timer, TimerMode, VecModel};
 
@@ -128,7 +129,7 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_volume(volume * 100.0);
     let player = Rc::new(RefCell::new(Player {
         engine,
-        views: KINDS.map(View::new),
+        views: [Kind::Music, Kind::Mixes, Kind::Radio].map(View::new),
         tab: 0,
         playing: None,
         queue: Queue::new(shuffle, repeat),
@@ -142,6 +143,14 @@ fn main() -> Result<(), slint::PlatformError> {
                 let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_covers_ready());
             }
         }),
+        stations: Vec::new(),
+        station_now: None,
+        connect_attempt: 0,
+        connected: Arc::default(),
+        check_attempt: 0,
+        checked: Arc::default(),
+        editing: None,
+        deleting: None,
     }));
 
     if let Err(e) = bass::init(-1, &paths::base_dir()) {
@@ -158,6 +167,12 @@ fn main() -> Result<(), slint::PlatformError> {
                     player.borrow_mut().set_library(&ui, i, lib);
                 }
             }
+            let stations = db.stations().unwrap_or_default();
+            let stations = stations
+                .into_iter()
+                .map(|(id, name, url)| Station { id, name, url })
+                .collect();
+            player.borrow_mut().set_stations(&ui, stations);
             player.borrow_mut().db = Some(db);
         }
         Err(e) => ui.set_summary(format!("Couldn't open the library ({e})").into()),
@@ -200,6 +215,43 @@ fn main() -> Result<(), slint::PlatformError> {
     on!(on_move_selection, |p, ui, steps| p
         .move_selection(&ui, steps));
     on!(on_covers_ready, |p, ui| p.covers_ready(&ui));
+    // Radio.
+    on!(on_add_station, |p, ui| p.open_editor(&ui, None));
+    on!(on_edit_station, |p, ui, row| p.open_editor(&ui, Some(row)));
+    on!(on_delete_station, |p, ui, row| p.ask_delete(&ui, row));
+    on!(on_confirm_delete, |p, ui| p.confirm_delete(&ui));
+    on!(on_editor_check, |p, ui| p.editor_check(&ui));
+    on!(on_editor_save, |p, ui| p.editor_save(&ui));
+    on!(on_station_connected, |p, ui| p.station_connected(&ui));
+    on!(on_probe_done, |p, ui| p.probe_done(&ui));
+    on!(on_import_stations, |p, ui| {
+        let picked = rfd::FileDialog::new()
+            .set_title("Import stations")
+            .add_filter("Station lists", &["m3u", "m3u8", "txt"])
+            .pick_file();
+        if let Some(text) = picked.and_then(|f| std::fs::read_to_string(f).ok()) {
+            let added = p.import_stations(&ui, &text);
+            let what = if added == 1 {
+                "1 station"
+            } else {
+                &format!("{added} stations")
+            };
+            ui.set_summary(format!("Imported {what}").into());
+        }
+    });
+    on!(on_export_stations, |p, ui| {
+        let picked = rfd::FileDialog::new()
+            .set_title("Export stations")
+            .add_filter("Station list", &["m3u"])
+            .set_file_name("Melora stations.m3u")
+            .save_file();
+        if let Some(file) = picked
+            && let Err(e) = std::fs::write(&file, p.export_stations())
+        {
+            ui.set_summary(format!("Couldn't save the stations ({e})").into());
+        }
+    });
+
     on!(on_toggle_shuffle, |p, ui| p.toggle_shuffle(&ui));
     on!(on_cycle_repeat, |p, ui| p.cycle_repeat(&ui));
     on!(on_volume_changed, |p, _ui, v| p

@@ -194,7 +194,7 @@ pub fn load(rows: &[TrackRow], kind: Kind, roots: &[String], base: &str) -> Libr
             let date = mix_date(&t.title, albums[t.album].year).unwrap_or((i32::MAX, 0, 0)); // undated mixes last
             (t.collection.to_lowercase(), date, t.title.to_lowercase())
         }),
-        Kind::Music => tracks.sort_by_cached_key(|t| {
+        Kind::Music | Kind::Radio => tracks.sort_by_cached_key(|t| {
             let a = &albums[t.album];
             (
                 a.artist.to_lowercase(),

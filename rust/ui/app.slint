@@ -4,6 +4,8 @@ import "fonts/IBMPlexSans-SemiBold.ttf";
 import { Theme } from "theme.slint";
 import { IconButton, TabButton, ThinSlider } from "controls.slint";
 import { Row, TrackList } from "track_list.slint";
+import { Button } from "std-widgets.slint";
+import { ConfirmPanel, MenuItem, StationEditor } from "dialogs.slint";
 
 export { Row }
 
@@ -43,7 +45,32 @@ export component AppWindow inherits Window {
     // While the seek bar is being dragged, playback mustn't move it back.
     out property <bool> seeking: seek-bar.dragging;
 
+    // Radio: the station editor and the delete confirmation (set by Rust).
+    in-out property <bool> editor-open;
+    in property <string> editor-heading;
+    in-out property <string> editor-url;
+    in-out property <string> editor-name;
+    in property <string> editor-status;
+    in property <bool> editor-error;
+    in property <bool> editor-busy;
+    in-out property <bool> confirm-open;
+    in property <string> confirm-message;
+    property <int> menu-row: -1;
+    property <length> menu-x;
+    property <length> menu-y;
+
     callback add-folder();
+    callback add-station();
+    callback edit-station(int);
+    callback delete-station(int);
+    callback confirm-delete();
+    callback editor-check();
+    callback editor-save();
+    callback import-stations();
+    callback export-stations();
+    // A station connected (or failed), or a check of an address finished, in the background.
+    callback station-connected();
+    callback probe-done();
     callback show-tab(int);
     callback toggle-play();
     callback previous();
@@ -191,6 +218,11 @@ export component AppWindow inherits Window {
                         active: tab == 1;
                         clicked => { show-tab(1); }
                     }
+                    TabButton {
+                        text: "Radio";
+                        active: tab == 2;
+                        clicked => { show-tab(2); }
+                    }
                 }
                 Text {
                     text: summary;
@@ -199,11 +231,25 @@ export component AppWindow inherits Window {
                     horizontal-stretch: 1;
                     overflow: elide;
                 }
-                IconButton {
+                if tab != 2: IconButton {
                     glyph: "\u{E8F4}";
                     label: tab == 0 ? "Add music folder" : "Add mixes folder";
                     size: 36px;
                     clicked => { add-folder(); }
+                }
+                if tab == 2: IconButton {
+                    glyph: "\u{E710}";
+                    label: "Add station";
+                    size: 36px;
+                    clicked => { add-station(); }
+                }
+                if tab == 2: more := IconButton {
+                    glyph: "\u{E712}";
+                    label: "More: import or export stations";
+                    size: 36px;
+                    clicked => {
+                        stations-menu.show();
+                    }
                 }
             }
 
@@ -216,7 +262,7 @@ export component AppWindow inherits Window {
                 alignment: center;
                 spacing: 8px;
                 Text {
-                    text: tab == 0 ? "No music yet" : "No mixes yet";
+                    text: tab == 0 ? "No music yet" : tab == 1 ? "No mixes yet" : "No stations yet";
                     font-size: 15px;
                     font-weight: 600;
                     color: Theme.text;
@@ -224,9 +270,23 @@ export component AppWindow inherits Window {
                 }
                 Text {
                     text: tab == 0 ? "Add a folder with the button at the top right."
-                        : "Add the folder where you keep DJ sets and mixes, with the button at the top right.";
+                        : tab == 1 ? "Add the folder where you keep DJ sets and mixes, with the button at the top right."
+                        : "Paste a stream address and give it a name before you tune in.";
                     color: Theme.dim;
                     horizontal-alignment: center;
+                }
+                if tab == 2: HorizontalLayout {
+                    alignment: center;
+                    spacing: 8px;
+                    padding-top: 8px;
+                    Button {
+                        text: "Add station…";
+                        clicked => { add-station(); }
+                    }
+                    Button {
+                        text: "Import stations…";
+                        clicked => { import-stations(); }
+                    }
                 }
             }
 
@@ -238,10 +298,90 @@ export component AppWindow inherits Window {
                 total-height: list-height;
                 view-changed => { list-view-changed(); }
                 selected <=> selected;
-                label: tab == 0 ? "Music" : "Mixes";
+                label: tab == 0 ? "Music" : tab == 1 ? "Mixes" : "Radio stations";
                 move-selection(n) => { move-selection(n); }
                 activate(i) => { activate(i); }
+                edit-row(i) => { if (tab == 2) { edit-station(i); } }
+                delete-row(i) => { if (tab == 2) { delete-station(i); } }
+                row-menu(i, x, y) => {
+                    menu-row = i;
+                    menu-x = x;
+                    menu-y = y;
+                    station-menu.show();
+                }
             }
         }
+    }
+
+    // Right-click on a station.
+    station-menu := PopupWindow {
+        x: menu-x;
+        y: menu-y;
+        Rectangle {
+            background: Theme.panel;
+            border-color: Theme.divider;
+            border-width: 1px;
+            border-radius: 6px;
+            VerticalLayout {
+                padding: 4px;
+                MenuItem {
+                    text: "Play";
+                    clicked => { activate(menu-row); }
+                }
+                MenuItem {
+                    text: "Edit…   (F2)";
+                    clicked => { edit-station(menu-row); }
+                }
+                MenuItem {
+                    text: "Delete   (Del)";
+                    clicked => { delete-station(menu-row); }
+                }
+            }
+        }
+    }
+
+    // The ⋯ button next to Add station.
+    stations-menu := PopupWindow {
+        x: root.width - 200px;
+        y: 150px;
+        Rectangle {
+            background: Theme.panel;
+            border-color: Theme.divider;
+            border-width: 1px;
+            border-radius: 6px;
+            VerticalLayout {
+                padding: 4px;
+                MenuItem {
+                    text: "Export stations…";
+                    clicked => { export-stations(); }
+                }
+                MenuItem {
+                    text: "Import stations…";
+                    clicked => { import-stations(); }
+                }
+            }
+        }
+    }
+
+    if editor-open: StationEditor {
+        width: root.width;
+        height: root.height;
+        heading: editor-heading;
+        url <=> editor-url;
+        name <=> editor-name;
+        status: editor-status;
+        status-is-error: editor-error;
+        busy: editor-busy;
+        check => { editor-check(); }
+        save => { editor-save(); }
+        cancel => { editor-open = false; }
+    }
+
+    if confirm-open: ConfirmPanel {
+        width: root.width;
+        height: root.height;
+        message: confirm-message;
+        confirm => { confirm-delete(); }
+        cancel => { confirm-open = false; }
     }
 }

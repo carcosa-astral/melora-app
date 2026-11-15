@@ -11,6 +11,9 @@ pub const TRACK_HEIGHT: f32 = 32.0;
 /// Mixes: a heading per DJ with their round picture, then their mixes.
 pub const DJ_HEIGHT: f32 = 70.0;
 pub const DJ_PICTURE_SIZE: f32 = 44.0;
+/// Radio: a row per station, with its logo.
+pub const STATION_HEIGHT: f32 = 56.0;
+pub const LOGO_SIZE: f32 = 36.0;
 /// The album cover, drawn left of the album's title and tracks (as in 2.x), and the space an
 /// album takes at least so a short one leaves room for its cover: margin, cover, margin.
 pub const COVER_SIZE: f32 = 168.0;
@@ -24,6 +27,8 @@ pub enum RowKind {
     /// Mixes: a DJ's heading, and one of their mixes.
     Dj,
     Mix,
+    /// Radio: a station (`track` is its index in the list of stations).
+    Station,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -93,6 +98,7 @@ pub fn summary(lib: &Library, kind: Kind) -> String {
         (Kind::Music, _) => "tracks",
         (Kind::Mixes, 1) => "mix",
         (Kind::Mixes, _) => "mixes",
+        (Kind::Radio, _) => return String::new(), // see `station_summary`
     };
     let ms = lib.tracks.iter().map(|t| t.duration_ms).sum();
     format!("{} {noun}  ·  {}", count(n), total(ms))
@@ -124,8 +130,10 @@ pub fn dj_summary(lib: &Library, mixes: &[&Track]) -> String {
 }
 
 pub fn build(lib: &Library, kind: Kind) -> Vec<ListRow> {
-    if kind == Kind::Mixes {
-        return build_mixes(lib);
+    match kind {
+        Kind::Mixes => return build_mixes(lib),
+        Kind::Radio => return Vec::new(), // see `build_stations`
+        Kind::Music => {}
     }
     let mut rows = Vec::new();
     let mut y = 0.0;
@@ -136,6 +144,7 @@ pub fn build(lib: &Library, kind: Kind) -> Vec<ListRow> {
             RowKind::Disc => DISC_HEIGHT,
             RowKind::Track | RowKind::Mix => TRACK_HEIGHT,
             RowKind::Dj => DJ_HEIGHT,
+            RowKind::Station => STATION_HEIGHT,
         };
         if row.kind == RowKind::Album {
             // A short album above still needs room for its cover.
@@ -248,6 +257,34 @@ fn build_mixes(lib: &Library) -> Vec<ListRow> {
         i = end;
     }
     rows
+}
+
+/// "5 stations".
+pub fn station_summary(count: usize) -> String {
+    match count {
+        0 => String::new(),
+        1 => "1 station".into(),
+        n => format!("{n} stations"),
+    }
+}
+
+/// Radio: a row per station, named, with what it's playing (or a status) under it, else its host.
+pub fn build_stations<'a>(
+    stations: impl IntoIterator<Item = (&'a str, &'a str, Option<&'a str>)>,
+) -> Vec<ListRow> {
+    stations
+        .into_iter()
+        .enumerate()
+        .map(|(i, (name, url, now))| ListRow {
+            kind: RowKind::Station,
+            title: name.to_string(),
+            subtitle: now.map_or_else(|| crate::radio::host(url), str::to_string),
+            track: Some(i),
+            y: i as f32 * STATION_HEIGHT,
+            height: STATION_HEIGHT,
+            ..blank()
+        })
+        .collect()
 }
 
 fn blank() -> ListRow {
@@ -478,6 +515,21 @@ mod tests {
         assert_eq!(rows[2].y, DJ_HEIGHT + TRACK_HEIGHT);
         assert_eq!(step(&rows, Some(1), 1), Some(3)); // over the next DJ's heading
         assert_eq!(summary(&l, Kind::Mixes), "3 mixes  ·  2h 15m");
+    }
+
+    #[test]
+    fn station_rows_show_what_is_playing_or_the_host() {
+        let rows = build_stations([
+            ("Groove Salad", "http://ice1.somafm.com/gs", None),
+            ("BBC", "https://x.y/z", Some("Song")),
+        ]);
+        assert_eq!(
+            (rows[0].subtitle.as_str(), rows[1].subtitle.as_str()),
+            ("ice1.somafm.com", "Song")
+        );
+        assert_eq!((rows[1].track, rows[1].y), (Some(1), STATION_HEIGHT));
+        assert_eq!(step(&rows, Some(0), 1), Some(1));
+        assert_eq!(station_summary(2), "2 stations");
     }
 
     #[test]

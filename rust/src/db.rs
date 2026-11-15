@@ -8,6 +8,8 @@ use crate::paths::{from_stored, to_stored};
 pub enum Kind {
     Music,
     Mixes,
+    /// Internet radio: stations rather than files.
+    Radio,
 }
 
 impl Kind {
@@ -15,6 +17,7 @@ impl Kind {
         match self {
             Kind::Music => "music",
             Kind::Mixes => "mixes",
+            Kind::Radio => "radio",
         }
     }
 }
@@ -154,6 +157,37 @@ impl Db {
         rows.collect()
     }
 
+    /// Saved stations as (id, name, address), in the order they were added.
+    pub fn stations(&self) -> rusqlite::Result<Vec<(i64, String, String)>> {
+        let mut q = self
+            .conn
+            .prepare("SELECT id, name, url FROM stations ORDER BY id")?;
+        let rows = q.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        rows.collect()
+    }
+
+    pub fn add_station(&self, name: &str, url: &str) -> rusqlite::Result<i64> {
+        self.conn.execute(
+            "INSERT INTO stations (name, url) VALUES (?1, ?2)",
+            params![name, url],
+        )?;
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn update_station(&self, id: i64, name: &str, url: &str) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "UPDATE stations SET name = ?1, url = ?2 WHERE id = ?3",
+            params![name, url, id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_station(&self, id: i64) -> rusqlite::Result<()> {
+        self.conn
+            .execute("DELETE FROM stations WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
     /// A setting as 2.x stores it (key and text value), or None when it was never set.
     pub fn setting(&self, key: &str) -> Option<String> {
         self.conn
@@ -253,6 +287,24 @@ mod tests {
             [r"C:\Users\me\Music"]
         );
         assert!(d.folders(Kind::Mixes).expect("folders").is_empty());
+    }
+
+    #[test]
+    fn stations_add_edit_and_delete() {
+        let d = db();
+        let a = d.add_station("Groove Salad", "http://a/gs").expect("add");
+        let b = d.add_station("BBC", "http://b/x").expect("add");
+        d.update_station(a, "Groove Salad Classic", "http://a/gsc")
+            .expect("update");
+        d.delete_station(b).expect("delete");
+        assert_eq!(
+            d.stations().expect("stations"),
+            [(
+                a,
+                "Groove Salad Classic".to_string(),
+                "http://a/gsc".to_string()
+            )]
+        );
     }
 
     #[test]

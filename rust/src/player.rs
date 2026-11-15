@@ -1,18 +1,35 @@
-//! The two libraries (Music and Mixes), which one is on screen, and what's playing. Owned by the
-//! UI thread.
+//! The libraries (Music and Mixes) and the radio stations, which one is on screen, and what's
+//! playing. Owned by the UI thread.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use slint::{ComponentHandle, VecModel};
 
+use crate::bass::{self, Handle};
 use crate::db::{Db, Kind};
 use crate::engine::Engine;
 use crate::library::Library;
 use crate::queue::{Info, Queue, Repeat};
 use crate::rows::{self, ListRow, RowKind};
-use crate::{AppWindow, Row, covers};
+use crate::{AppWindow, Row, covers, radio};
+
+/// The Radio tab's place among the views.
+pub const RADIO: usize = 2;
+
+/// A saved radio station.
+pub struct Station {
+    pub id: i64,
+    pub name: String,
+    pub url: String,
+}
+
+/// A connection finished in the background: which attempt it was, and the stream or why not.
+type Connected = Option<(u64, Result<Handle, String>)>;
+/// A check of an address finished: which check, and the name it gives itself and its format.
+type Checked = Option<(u64, Result<(Option<String>, String), String>)>;
 
 /// One library as listed, with where its list was left.
 pub struct View {
@@ -64,8 +81,8 @@ impl View {
 
 pub struct Player {
     pub engine: Engine,
-    pub views: [View; 2],
-    /// The view on screen: 0 Music, 1 Mixes.
+    pub views: [View; 3],
+    /// The view on screen: 0 Music, 1 Mixes, 2 Radio.
     pub tab: usize,
     /// What's playing (or paused): the view it's in and its track there.
     pub playing: Option<(usize, usize)>,
@@ -80,6 +97,22 @@ pub struct Player {
     /// Pictures asked for and not back yet.
     pub pending: HashSet<String>,
     pub loader: covers::Loader,
+    pub stations: Vec<Station>,
+    /// What the playing station says it's playing, or a status ("Connecting…").
+    pub station_now: Option<String>,
+    /// Bumped by each connection attempt, so a slow one that's been overtaken is dropped.
+    pub connect_attempt: u64,
+    pub connected: Arc<Mutex<Connected>>,
+    pub check_attempt: u64,
+    pub checked: Arc<Mutex<Checked>>,
+    /// The station being edited (None: adding a new one).
+    pub editing: Option<i64>,
+    /// The station waiting for the delete to be confirmed.
+    pub deleting: Option<usize>,
+}
+
+fn take<T>(slot: &Mutex<Option<T>>) -> Option<T> {
+    slot.lock().unwrap_or_else(|e| e.into_inner()).take()
 }
 
 fn to_row(r: &ListRow, index: usize, playing: bool) -> Row {
@@ -91,6 +124,7 @@ fn to_row(r: &ListRow, index: usize, playing: bool) -> Row {
             RowKind::Track => 2,
             RowKind::Dj => 3,
             RowKind::Mix => 4,
+            RowKind::Station => 5,
         },
         title: r.title.as_str().into(),
         subtitle: r.subtitle.as_str().into(),
@@ -161,7 +195,12 @@ impl Player {
         ui.set_list_height(rows::total_height(&view.rows));
         ui.set_selected(view.selected);
         ui.set_list_scroll(view.scroll);
-        ui.set_summary(rows::summary(&view.lib, view.kind).into());
+        let summary = if view.kind == Kind::Radio {
+            rows::station_summary(self.stations.len())
+        } else {
+            rows::summary(&view.lib, view.kind)
+        };
+        ui.set_summary(summary.into());
         self.refresh_view(ui);
     }
 
@@ -277,6 +316,24 @@ impl Player {
             self.show_state(ui);
             return;
         };
+        if v == RADIO {
+            // Radio: the station's name, and what it says is playing (or how it's going).
+            let format = self
+                .engine
+                .is_live()
+                .then(|| self.engine.format())
+                .flatten()
+                .map(|(codec, freq, _)| format!("{codec}  ·  {:.1} kHz", f64::from(freq) / 1000.0));
+            let parts: Vec<String> = [self.station_now.clone(), format]
+                .into_iter()
+                .flatten()
+                .collect();
+            ui.set_track_title(self.stations.get(i).map_or("", |s| s.name.as_str()).into());
+            ui.set_track_detail(parts.join("  ·  ").into());
+            ui.set_length(0.0);
+            self.show_state(ui);
+            return;
+        }
         let view = &self.views[v];
         let t = &view.lib.tracks[i];
         // Music: artist and album. Mixes: artist and the DJ they're filed under.
@@ -326,6 +383,11 @@ impl Player {
 
     /// Runs every few milliseconds: finishes fades, follows the gapless hand-over, notices the end.
     pub fn tick(&mut self, ui: &AppWindow) {
+        if self.playing.is_some_and(|p| p.0 == RADIO) {
+            self.tick_radio(ui);
+            self.show_state(ui);
+            return;
+        }
         if self.engine.tick() {
             // The gapless hand-over happened: the queue moves on to what was lined up.
             let next = self
@@ -347,10 +409,21 @@ impl Player {
     }
 
     pub fn toggle_play(&mut self, ui: &AppWindow) {
-        if self.engine.is_playing() {
+        let radio = self.playing.filter(|p| p.0 == RADIO);
+        if self.engine.is_live() && self.engine.is_playing() {
+            // Radio can't pause; it stops (fading out), and Play tunes in again.
+            self.engine.fade_out_and_stop();
+            self.station_now = None;
+            self.after_station_change(ui);
+        } else if self.engine.is_playing() {
             self.engine.pause();
         } else if self.engine.is_loaded() {
             self.engine.resume();
+        } else if let Some((_, i)) = radio {
+            self.connect(ui, i);
+        } else if self.tab == RADIO && !self.stations.is_empty() {
+            let from = self.view().track_at(ui.get_selected()).unwrap_or(0);
+            self.connect(ui, from);
         } else if !self.view().lib.tracks.is_empty() {
             // Nothing loaded: play the selected track on screen, or the first.
             let from = self.view().track_at(ui.get_selected()).unwrap_or(0);
@@ -360,7 +433,7 @@ impl Player {
     }
 
     pub fn next(&mut self, ui: &AppWindow) {
-        if let Some((v, _)) = self.playing
+        if let Some((v, _)) = self.playing.filter(|p| p.0 != RADIO)
             && self.queue.next(true).is_some()
         {
             self.play_current(ui, v);
@@ -369,7 +442,9 @@ impl Player {
 
     /// Back a track, or to the start of this one when it's the first.
     pub fn previous(&mut self, ui: &AppWindow) {
-        let Some((v, i)) = self.playing else { return };
+        let Some((v, i)) = self.playing.filter(|p| p.0 != RADIO) else {
+            return;
+        };
         if self.queue.previous() == Some(i) {
             self.engine.seek(0.0);
         } else {
@@ -429,8 +504,293 @@ impl Player {
     }
 
     pub fn activate(&mut self, ui: &AppWindow, row: i32) {
-        if let Some(i) = self.view().track_at(row) {
-            self.play_at(ui, self.tab, i);
+        match self.view().track_at(row) {
+            Some(i) if self.tab == RADIO => self.connect(ui, i),
+            Some(i) => self.play_at(ui, self.tab, i),
+            None => {}
         }
+    }
+
+    // ---- Radio ----
+
+    /// Shows the stations as saved (at startup).
+    pub fn set_stations(&mut self, ui: &AppWindow, stations: Vec<Station>) {
+        self.stations = stations;
+        self.rebuild_radio(ui);
+    }
+
+    /// Rebuilds the station rows (names, and what the playing one says) and shows them if open.
+    fn rebuild_radio(&mut self, ui: &AppWindow) {
+        let playing = self.playing.filter(|p| p.0 == RADIO).map(|p| p.1);
+        let now = self.station_now.as_deref();
+        let view = &mut self.views[RADIO];
+        view.rows = rows::build_stations(self.stations.iter().enumerate().map(|(i, s)| {
+            (
+                s.name.as_str(),
+                s.url.as_str(),
+                if Some(i) == playing { now } else { None },
+            )
+        }));
+        view.track_rows = (0..view.rows.len()).collect();
+        if self.tab == RADIO {
+            ui.set_row_count(view.rows.len() as i32);
+            ui.set_list_height(rows::total_height(&view.rows));
+            ui.set_summary(rows::station_summary(self.stations.len()).into());
+            self.refresh_view(ui);
+        }
+    }
+
+    /// The station rows and the now-playing line after the playing station changed or said something.
+    fn after_station_change(&mut self, ui: &AppWindow) {
+        self.rebuild_radio(ui);
+        self.set_playing(ui, self.playing);
+    }
+
+    /// Tunes in to station `i`. Connecting can take seconds, so it happens on a worker thread;
+    /// `station_connected` picks up the result.
+    pub fn connect(&mut self, ui: &AppWindow, i: usize) {
+        let Some(url) = self.stations.get(i).map(|s| s.url.clone()) else {
+            return;
+        };
+        self.engine.stop();
+        self.connect_attempt += 1;
+        self.playing = Some((RADIO, i));
+        self.station_now = Some("Connecting…".into());
+        self.after_station_change(ui);
+
+        let (attempt, out, weak) = (self.connect_attempt, self.connected.clone(), ui.as_weak());
+        std::thread::spawn(move || {
+            let result = bass::open_url(&url, false);
+            *out.lock().unwrap_or_else(|e| e.into_inner()) = Some((attempt, result));
+            let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_station_connected());
+        });
+    }
+
+    pub fn station_connected(&mut self, ui: &AppWindow) {
+        let Some((attempt, result)) = take(&self.connected) else {
+            return;
+        };
+        if attempt != self.connect_attempt || !self.playing.is_some_and(|p| p.0 == RADIO) {
+            // Something else started meanwhile: drop this connection.
+            if let Ok(h) = result {
+                bass::free(h);
+            }
+            return;
+        }
+        match result {
+            Ok(h) => {
+                self.engine.play_live(h);
+                self.station_now = self.engine.stream_title();
+            }
+            Err(why) => self.station_now = Some(why),
+        }
+        self.after_station_change(ui);
+    }
+
+    /// Follows what the playing station says, and notices when it drops.
+    fn tick_radio(&mut self, ui: &AppWindow) {
+        self.engine.tick(); // finishes a fade-out
+        if self.engine.has_ended() {
+            self.engine.stop();
+            self.station_now = Some("The stream stopped.".into());
+            self.after_station_change(ui);
+        } else if self.engine.is_live() {
+            let title = self.engine.stream_title();
+            if title.is_some() && title != self.station_now {
+                self.station_now = title;
+                self.after_station_change(ui);
+            }
+        }
+    }
+
+    /// Opens the station panel: for a new station, or to edit the one on list row `row`.
+    pub fn open_editor(&mut self, ui: &AppWindow, row: Option<i32>) {
+        let station = row
+            .and_then(|r| self.views[RADIO].track_at(r))
+            .and_then(|i| self.stations.get(i));
+        self.editing = station.map(|s| s.id);
+        ui.set_editor_heading(
+            if station.is_some() {
+                "Edit station"
+            } else {
+                "Add station"
+            }
+            .into(),
+        );
+        ui.set_editor_url(station.map_or("", |s| s.url.as_str()).into());
+        ui.set_editor_name(station.map_or("", |s| s.name.as_str()).into());
+        ui.set_editor_status("".into());
+        ui.set_editor_error(false);
+        ui.set_editor_busy(false);
+        ui.set_editor_open(true);
+    }
+
+    /// Checks the pasted address works (without playing it) and reads the name it gives itself.
+    pub fn editor_check(&mut self, ui: &AppWindow) {
+        let Some(url) = radio::normalize_url(&ui.get_editor_url()) else {
+            ui.set_editor_status(
+                "That isn't a web address. It should start with http:// or https://.".into(),
+            );
+            ui.set_editor_error(true);
+            return;
+        };
+        ui.set_editor_url(url.as_str().into());
+        ui.set_editor_status("Checking…".into());
+        ui.set_editor_error(false);
+        ui.set_editor_busy(true);
+        self.check_attempt += 1;
+        let (attempt, out, weak) = (self.check_attempt, self.checked.clone(), ui.as_weak());
+        std::thread::spawn(move || {
+            let result = bass::open_url(&url, true).map(|h| {
+                let mut headers = bass::tags(h, bass::TAGS_ICY);
+                headers.extend(bass::tags(h, bass::TAGS_HTTP));
+                let lines = || headers.iter().map(String::as_str);
+                let name = radio::header_value(lines(), "icy-name");
+                let kbps = radio::header_value(lines(), "icy-br")
+                    .and_then(|b| b.split(',').next().map(str::to_string));
+                let codec = bass::codec_name(bass::info(h).2);
+                bass::free(h);
+                let format: Vec<String> = [
+                    (!codec.is_empty()).then(|| codec.to_string()),
+                    kbps.map(|k| format!("{k} kbps")),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                (name, format.join("  ·  "))
+            });
+            *out.lock().unwrap_or_else(|e| e.into_inner()) = Some((attempt, result));
+            let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_probe_done());
+        });
+    }
+
+    pub fn probe_done(&mut self, ui: &AppWindow) {
+        let Some((attempt, result)) = take(&self.checked) else {
+            return;
+        };
+        if attempt != self.check_attempt {
+            return;
+        }
+        ui.set_editor_busy(false);
+        match result {
+            Ok((name, format)) => {
+                let works = if format.is_empty() {
+                    "It works.".to_string()
+                } else {
+                    format!("It works:  {format}")
+                };
+                ui.set_editor_status(works.into());
+                ui.set_editor_error(false);
+                if ui.get_editor_name().trim().is_empty()
+                    && let Some(n) = name
+                {
+                    ui.set_editor_name(n.into());
+                }
+            }
+            Err(why) => {
+                ui.set_editor_status(why.into());
+                ui.set_editor_error(true);
+            }
+        }
+    }
+
+    pub fn editor_save(&mut self, ui: &AppWindow) {
+        let Some(url) = radio::normalize_url(&ui.get_editor_url()) else {
+            ui.set_editor_status(
+                "That isn't a web address. It should start with http:// or https://.".into(),
+            );
+            ui.set_editor_error(true);
+            return;
+        };
+        let name = ui.get_editor_name().trim().to_string();
+        if name.is_empty() {
+            ui.set_editor_status("Give the station a name.".into());
+            ui.set_editor_error(true);
+            return;
+        }
+        let Some(db) = &self.db else { return };
+        let saved = match self.editing {
+            Some(id) => db.update_station(id, &name, &url).map(|()| {
+                if let Some(s) = self.stations.iter_mut().find(|s| s.id == id) {
+                    (s.name, s.url) = (name.clone(), url.clone());
+                }
+            }),
+            None => db
+                .add_station(&name, &url)
+                .map(|id| self.stations.push(Station { id, name, url })),
+        };
+        match saved {
+            Ok(()) => {
+                ui.set_editor_open(false);
+                self.after_station_change(ui);
+            }
+            Err(e) => {
+                ui.set_editor_status(format!("Couldn't save the station ({e}).").into());
+                ui.set_editor_error(true);
+            }
+        }
+    }
+
+    /// Asks before deleting the station on list row `row`.
+    pub fn ask_delete(&mut self, ui: &AppWindow, row: i32) {
+        let Some(i) = self.views[RADIO].track_at(row) else {
+            return;
+        };
+        self.deleting = Some(i);
+        ui.set_confirm_message(format!("Delete {}?", self.stations[i].name).into());
+        ui.set_confirm_open(true);
+    }
+
+    pub fn confirm_delete(&mut self, ui: &AppWindow) {
+        ui.set_confirm_open(false);
+        let Some(i) = self.deleting.take().filter(|&i| i < self.stations.len()) else {
+            return;
+        };
+        if let Some(db) = &self.db
+            && db.delete_station(self.stations[i].id).is_err()
+        {
+            return;
+        }
+        self.stations.remove(i);
+        match self.playing {
+            Some((RADIO, p)) if p == i => {
+                self.engine.stop();
+                self.connect_attempt += 1;
+                self.playing = None;
+                self.station_now = None;
+            }
+            Some((RADIO, p)) if p > i => self.playing = Some((RADIO, p - 1)),
+            _ => {}
+        }
+        self.after_station_change(ui);
+    }
+
+    /// Adds the stations in an .m3u file, skipping addresses already saved. Returns how many.
+    pub fn import_stations(&mut self, ui: &AppWindow, text: &str) -> usize {
+        let Some(db) = &self.db else { return 0 };
+        let mut added = 0;
+        for (name, url) in radio::read_m3u(text) {
+            if self
+                .stations
+                .iter()
+                .any(|s| s.url.eq_ignore_ascii_case(&url))
+            {
+                continue;
+            }
+            if let Ok(id) = db.add_station(&name, &url) {
+                self.stations.push(Station { id, name, url });
+                added += 1;
+            }
+        }
+        self.after_station_change(ui);
+        added
+    }
+
+    pub fn export_stations(&self) -> String {
+        radio::write_m3u(
+            self.stations
+                .iter()
+                .map(|s| (s.name.as_str(), s.url.as_str())),
+        )
     }
 }

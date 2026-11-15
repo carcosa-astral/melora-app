@@ -22,6 +22,7 @@ fn main() {
         "bassflac.dll",
         "bassopus.dll",
         "bass_aac.dll",
+        "basshls.dll",
     ] {
         let from = Path::new("../lib/bass").join(dll);
         println!("cargo:rerun-if-changed={}", from.display());

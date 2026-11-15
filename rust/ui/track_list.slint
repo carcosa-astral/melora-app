@@ -4,7 +4,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
-// kind: 0 album heading, 1 disc heading, 2 track, 3 DJ heading, 4 mix.
+// kind: 0 album heading, 1 disc heading, 2 track, 3 DJ heading, 4 mix, 5 station.
 export struct Row {
     kind: int,
     // Position in the whole list (not just the rows in view).
@@ -39,29 +39,37 @@ component RowView inherits Rectangle {
     in property <int> count;
     callback clicked();
     callback double-clicked();
+    // Right-click, at this point in the window.
+    callback menu(length, length);
 
     height: item.height;
     accessible-role: list-item;
     accessible-label: item.kind == 0 ? "Album: " + item.title + ", " + item.subtitle
         : item.kind == 3 ? "DJ: " + item.title + ", " + item.subtitle
+        : item.kind == 5 ? item.title + ", " + item.subtitle + (item.playing ? ", playing" : "")
         : item.kind == 1 ? item.title
         : item.title + (item.subtitle == "" ? "" : ", " + item.subtitle) + ", " + item.length + (item.playing ? ", playing" : "");
-    accessible-item-selectable: item.kind == 2 || item.kind == 4;
+    accessible-item-selectable: item.kind == 2 || item.kind == 4 || item.kind == 5;
     accessible-item-selected: selected;
     accessible-item-index: index;
     accessible-item-count: count;
 
     // The selection only covers the track itself, never the cover beside it.
     if selected: Rectangle {
-        x: (item.kind == 4 ? Layout.mix-indent : Layout.indent) - 8px;
+        x: (item.kind == 4 ? Layout.mix-indent : item.kind == 5 ? Layout.margin : Layout.indent) - 8px;
         width: parent.width - self.x - 12px;
         border-radius: 4px;
         background: Theme.panel;
     }
 
-    TouchArea {
+    touch := TouchArea {
         clicked => { root.clicked(); }
         double-clicked => { root.double-clicked(); }
+        pointer-event(e) => {
+            if (e.button == PointerEventButton.right && e.kind == PointerEventKind.up) {
+                root.menu(root.absolute-position.x + self.mouse-x, root.absolute-position.y + self.mouse-y);
+            }
+        }
     }
 
     if item.kind == 0: Rectangle {
@@ -166,6 +174,46 @@ component RowView inherits Rectangle {
         }
     }
 
+    if item.kind == 5: Rectangle {
+        Rectangle {
+            x: Layout.margin;
+            y: (parent.height - self.height) / 2;
+            width: 36px;                         // rows.rs LOGO_SIZE
+            height: 36px;
+            border-radius: self.width / 2;
+            background: Theme.panel;
+            if !item.has-art: Text {
+                text: "\u{EC05}";
+                font-family: "Segoe Fluent Icons";
+                font-size: 15px;
+                color: item.playing ? Theme.accent : Theme.dim;
+            }
+            if item.has-art: Image {
+                width: parent.width;
+                height: parent.height;
+                source: item.art;
+                image-fit: cover;
+            }
+        }
+        VerticalLayout {
+            x: Layout.margin + 36px + 14px;
+            width: parent.width - self.x - 20px;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: item.title;
+                color: item.playing ? Theme.accent : Theme.text;
+                font-weight: 600;
+                overflow: elide;
+            }
+            Text {
+                text: item.subtitle;
+                color: Theme.dim;
+                overflow: elide;
+            }
+        }
+    }
+
     if item.kind == 4: HorizontalLayout {
         x: Layout.mix-indent;
         width: parent.width - self.x - 20px;
@@ -242,6 +290,10 @@ export component TrackList inherits FocusScope {
     in property <string> label;
     callback move-selection(int);
     callback activate(int);
+    // Radio: F2 edits, Delete removes, right-click opens the station menu (at a window point).
+    callback edit-row(int);
+    callback delete-row(int);
+    callback row-menu(int, length, length);
     // The scroll position or the height changed: Rust hands over the rows now in view.
     callback view-changed();
 
@@ -260,6 +312,8 @@ export component TrackList inherits FocusScope {
         if (e.text == Key.Home) { move-selection(-1000000); return accept; }
         if (e.text == Key.End) { move-selection(1000000); return accept; }
         if (e.text == Key.Return && selected >= 0) { activate(selected); return accept; }
+        if (e.text == Key.F2 && selected >= 0) { edit-row(selected); return accept; }
+        if (e.text == Key.Delete && selected >= 0) { delete-row(selected); return accept; }
         reject
     }
 
@@ -280,10 +334,17 @@ export component TrackList inherits FocusScope {
             selected: row.index == root.selected;
             clicked => {
                 root.focus();
-                if (row.kind == 2 || row.kind == 4) { root.selected = row.index; }
+                if (row.kind == 2 || row.kind == 4 || row.kind == 5) { root.selected = row.index; }
             }
             double-clicked => {
-                if (row.kind == 2 || row.kind == 4) { root.activate(row.index); }
+                if (row.kind == 2 || row.kind == 4 || row.kind == 5) { root.activate(row.index); }
+            }
+            menu(x, y) => {
+                root.focus();
+                if (row.kind == 5) {
+                    root.selected = row.index;
+                    root.row-menu(row.index, x, y);
+                }
             }
         }
     }

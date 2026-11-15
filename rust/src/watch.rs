@@ -40,10 +40,10 @@ pub fn watch(folders: &[String], changed: impl Fn() + Send + 'static) -> Watch {
             }
         };
         // A folder that can't be watched still gets scanned at startup and when folders change.
-        if let Ok(mut w) = notify::recommended_watcher(handler) {
-            if w.watch(Path::new(folder), RecursiveMode::Recursive).is_ok() {
-                watchers.push(w);
-            }
+        if let Ok(mut w) = notify::recommended_watcher(handler)
+            && w.watch(Path::new(folder), RecursiveMode::Recursive).is_ok()
+        {
+            watchers.push(w);
         }
     }
     drop(tx); // the watchers hold the only senders, so the thread ends when they're dropped

@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use crate::bass::{self, Handle};
+use crate::radio;
 
 /// Pausing and stopping fade out over this long, and resuming fades back in, so neither clicks.
 pub const FADE_MS: u32 = 150;
@@ -71,6 +72,8 @@ pub struct Engine {
     volume: f32,
     /// A pause or stop that's fading out already counts as done for everyone asking.
     pending: Option<(Instant, Pending)>,
+    /// True when `stream` is an internet stream (radio) rather than the file output.
+    live: bool,
 }
 
 fn lock(feed: &Mutex<Feed>) -> MutexGuard<'_, Feed> {
@@ -131,7 +134,36 @@ impl Engine {
             chans: 0,
             volume: 1.0,
             pending: None,
+            live: false,
         }
+    }
+
+    /// Plays an internet stream already connected with `bass::open_url`; the engine owns it now.
+    pub fn play_live(&mut self, handle: Handle) -> bool {
+        self.free_stream();
+        self.stream = handle;
+        self.live = true;
+        bass::set_volume(handle, self.volume);
+        bass::play(handle)
+    }
+
+    pub fn is_live(&self) -> bool {
+        self.live && self.stream != 0
+    }
+
+    /// What a live stream says is playing: its ICY title, or its Ogg comments.
+    pub fn stream_title(&self) -> Option<String> {
+        if !self.is_live() {
+            return None;
+        }
+        let meta = bass::tags(self.stream, bass::TAGS_META);
+        meta.first().and_then(|m| radio::icy_title(m)).or_else(|| {
+            radio::from_vorbis_comments(
+                bass::tags(self.stream, bass::TAGS_OGG)
+                    .iter()
+                    .map(String::as_str),
+            )
+        })
     }
 
     /// Starts playing a file. False if BASS can't open it.
@@ -161,7 +193,7 @@ impl Engine {
     /// output can't change format mid-stream, so a file in another sample rate or channel layout is
     /// converted to the output's as it plays. False if the file can't be opened.
     pub fn set_next(&mut self, path: Option<&Path>) -> bool {
-        if self.stream == 0 {
+        if self.stream == 0 || self.live {
             return false;
         }
         let mut next = path.and_then(|path| {
@@ -213,7 +245,7 @@ impl Engine {
                 None => {}
             }
         }
-        if self.stream == 0 || self.pending.is_some() {
+        if self.stream == 0 || self.pending.is_some() || self.live {
             return false;
         }
         let heard = bass::position_bytes(self.stream);
@@ -225,11 +257,12 @@ impl Engine {
         finished.is_some()
     }
 
-    /// True once the last track has played to its end with nothing queued after it.
+    /// True once the last track has played to its end with nothing queued after it, or a live
+    /// stream has dropped.
     pub fn has_ended(&self) -> bool {
         self.stream != 0
             && self.pending.is_none()
-            && lock(&self.feed).drained
+            && (self.live || lock(&self.feed).drained)
             && bass::is_stopped(self.stream)
     }
 
@@ -277,7 +310,6 @@ impl Engine {
     }
 
     /// Stops after a short fade-out; it counts as stopped at once (`is_loaded` is false).
-    #[cfg_attr(not(test), allow(dead_code))] // wired to the UI with the full transport in phase 2
     pub fn fade_out_and_stop(&mut self) {
         if !self.is_playing() {
             self.stop();
@@ -290,12 +322,15 @@ impl Engine {
         ));
     }
 
-    /// Seconds into the track being heard.
+    /// Seconds into the track being heard (for a live stream: time listened).
     pub fn position(&self) -> f64 {
         if self.stream == 0 {
             return 0.0;
         }
         let heard = bass::position_bytes(self.stream);
+        if self.live {
+            return bass::bytes_to_seconds(self.stream, heard);
+        }
         let f = lock(&self.feed);
         f.segments.first().map_or(0.0, |s| {
             s.start_seconds
@@ -303,8 +338,11 @@ impl Engine {
         })
     }
 
-    /// Length of the track being heard, in seconds.
+    /// Length of the track being heard, in seconds; 0 for a live stream.
     pub fn length(&self) -> f64 {
+        if self.live {
+            return 0.0;
+        }
         lock(&self.feed)
             .segments
             .first()
@@ -313,8 +351,12 @@ impl Engine {
 
     /// Codec, sample rate and channels of the track being heard (its own, not the output's).
     pub fn format(&self) -> Option<(&'static str, u32, u32)> {
-        let f = lock(&self.feed);
-        let (freq, chans, ctype) = bass::info(f.segments.first()?.decoder);
+        let handle = if self.is_live() {
+            self.stream
+        } else {
+            lock(&self.feed).segments.first()?.decoder
+        };
+        let (freq, chans, ctype) = bass::info(handle);
         Some((bass::codec_name(ctype), freq, chans))
     }
 
@@ -331,7 +373,7 @@ impl Engine {
     /// (dropping what it had buffered), in the track's own format if it was being converted, and
     /// the queued track is reopened from its start.
     pub fn seek(&mut self, seconds: f64) {
-        if self.stream == 0 {
+        if self.stream == 0 || self.live {
             return;
         }
         let was_playing = self.is_playing();
@@ -386,6 +428,7 @@ impl Engine {
         }
         self.stream = 0;
         self.pending = None;
+        self.live = false;
         let old = std::mem::take(&mut *lock(&self.feed));
         drop(old); // frees the decoders outside the lock
     }
