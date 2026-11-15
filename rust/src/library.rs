@@ -357,6 +357,15 @@ pub fn recording_mbid(path: &Path) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// A file's MusicBrainz release ID (Picard writes one), for the album's exact cover.
+pub fn release_mbid(path: &Path) -> Option<String> {
+    let file = lofty::read_from_path(path).ok()?;
+    let tag = file.primary_tag().or_else(|| file.first_tag())?;
+    tag.get_string(ItemKey::MusicBrainzReleaseId)
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
+}
+
 /// Brings the database in line with the folders on disk. Returns true if anything changed.
 pub fn scan(
     db: &mut Db,

@@ -37,7 +37,7 @@ Phase 3 is done:
 - Station logos from Radio Browser, by the station's address or else its name, cached under 2.x's
   keys (found ones kept, misses tried again after a week). They follow 2.x's "online" setting.
 
-Phase 4, in progress:
+Phase 4:
 - Done: Melora's icon on the exe (Explorer, a pinned taskbar button), the window and the tray.
 - Done: the tray icon, as in 2.x. Left-click shows or hides Melora; right-click has what's playing,
   Play/Pause (Stop for radio), Next, Previous, Show Melora and Quit; the tooltip says what's
@@ -56,7 +56,13 @@ Phase 4, in progress:
   Plays wait in the database's queue while offline and go out in batches, retried every 5
   minutes. The heart (or Ctrl+L) loves a track on both, and Last.fm says if it was loved on its
   website. Logins are 2.x's settings, so a 2.x data folder stays connected.
-- Next: Discord.
+- Done: Discord, as in 2.x: "Listening to" on your profile with the title, artist, album (or DJ,
+  or station), the cover and a progress bar, through the Discord app's local pipe and your own
+  application ID. Mixes and radio can each be left out; nothing shows while paused. Covers are
+  web addresses, found on the Cover Art Archive (for files tagged by Picard), iTunes and Deezer,
+  and DJ photos on Deezer, cached under 2.x's keys; nothing is looked up while it's off.
+
+Phase 4 is done.
 
 Covers have 6 px rounded corners and DJ pictures are round, as in 2.x. The rounding is baked into
 the picture when it's shrunk, because Slint's software renderer doesn't round a cropped image.
@@ -94,7 +100,9 @@ cargo build --release
 | `src/queue.rs` | The play order: in order or shuffled, and repeat |
 | `src/watch.rs` | Watching library folders for changes |
 | `src/radio.rs` | Stream titles and headers, pasted addresses, and .m3u station files |
-| `src/logos.rs` | Station logos from Radio Browser |
+| `src/online.rs` | Finding pictures online: covers, DJ photos and station logos, with 2.x's cache |
+| `src/logos.rs` | Fetching station logos and drawing them round |
+| `src/discord.rs` | "Listening to" on Discord |
 | `src/rows.rs` | The list's rows (headings and tracks), their positions, and keyboard steps |
 | `src/window.rs` | The dark title bar, and hiding to and coming back from the tray (Windows) |
 | `src/tray.rs` | The tray icon and its menu |

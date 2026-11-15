@@ -4,11 +4,13 @@
 mod bass;
 mod covers;
 mod db;
+mod discord;
 mod engine;
 mod folder;
 mod library;
 mod logos;
 mod media;
+mod online;
 mod paths;
 mod player;
 mod queue;
@@ -202,6 +204,13 @@ fn main() -> Result<(), slint::PlatformError> {
         }),
         listen: None,
         last_tick: Instant::now(),
+        discord: db.is_ok().then(|| {
+            let weak = ui.as_weak();
+            discord::Discord::new(db_file.clone(), base.clone(), move || {
+                let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_discord_status_changed());
+            })
+        }),
+        tuned_in_at: 0,
         // Tray clicks and menu choices arrive off to the side; hand them to the window's thread.
         tray: tray::Tray::new({
             let weak = ui.as_weak();
@@ -323,6 +332,7 @@ fn main() -> Result<(), slint::PlatformError> {
             ui.set_lastfm_secret(db.setting("lastfm.secret").unwrap_or_default().into());
         }
         p.show_scrobbling(&ui);
+        p.show_discord(&ui);
         ui.set_settings_open(true);
     });
     // Scrobbling and loves.
@@ -339,6 +349,16 @@ fn main() -> Result<(), slint::PlatformError> {
         .disconnect(&ui, scrobbler::LASTFM));
     on!(on_listenbrainz_disconnect, |p, ui| p
         .disconnect(&ui, scrobbler::LISTENBRAINZ));
+    // Discord.
+    on!(on_discord_enabled_changed, |p, _ui, on| p
+        .set_discord("discord.enabled", if on { "1" } else { "0" }));
+    on!(on_discord_app_id_changed, |p, _ui, id| p
+        .set_discord("discord.appId", &id));
+    on!(on_discord_mixes_changed, |p, _ui, on| p
+        .set_discord("discord.mixes", if on { "1" } else { "0" }));
+    on!(on_discord_radio_changed, |p, _ui, on| p
+        .set_discord("discord.radio", if on { "1" } else { "0" }));
+    on!(on_discord_status_changed, |p, ui| p.show_discord(&ui));
     on!(on_minimize_to_tray_changed, |p, _ui, on| p
         .set_minimize_to_tray(on));
     let (file, b) = (db_file.clone(), base.clone());

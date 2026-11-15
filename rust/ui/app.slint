@@ -81,6 +81,11 @@ export component AppWindow inherits Window {
     // The heart: shown while a track (not radio) plays and a scrobbling service is connected.
     in property <bool> can-love;
     in property <bool> loved;
+    in-out property <bool> discord-enabled;
+    in-out property <string> discord-app-id;
+    in property <string> discord-status;
+    in-out property <bool> discord-mixes;
+    in-out property <bool> discord-radio;
     property <int> menu-row: -1;
     property <length> menu-x;
     property <length> menu-y;
@@ -97,6 +102,12 @@ export component AppWindow inherits Window {
     callback listenbrainz-disconnect();
     // The scrobbler has news (sent plays, a love checked, a connect step).
     callback scrobbler-report();
+    callback discord-enabled-changed(bool);
+    callback discord-app-id-changed(string);
+    callback discord-mixes-changed(bool);
+    callback discord-radio-changed(bool);
+    // The Discord worker's status line changed.
+    callback discord-status-changed();
     callback minimize-to-tray-changed(bool);
     callback online-art-changed(bool);
     callback add-station();
@@ -455,6 +466,15 @@ export component AppWindow inherits Window {
         lastfm-disconnect => { lastfm-disconnect(); }
         listenbrainz-connect => { listenbrainz-connect(); }
         listenbrainz-disconnect => { listenbrainz-disconnect(); }
+        discord-enabled <=> discord-enabled;
+        discord-app-id <=> discord-app-id;
+        discord-status: discord-status;
+        discord-mixes <=> discord-mixes;
+        discord-radio <=> discord-radio;
+        discord-enabled-changed(on) => { discord-enabled-changed(on); }
+        discord-app-id-changed(t) => { discord-app-id-changed(t); }
+        discord-mixes-changed(on) => { discord-mixes-changed(on); }
+        discord-radio-changed(on) => { discord-radio-changed(on); }
         add-folder(k) => { add-folder(k); }
         remove-folder(k, path) => { remove-folder(k, path); }
         export-stations => { export-stations(); }

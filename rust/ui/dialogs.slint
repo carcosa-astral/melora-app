@@ -216,6 +216,16 @@ export component SettingsPanel inherits Rectangle {
     callback lastfm-disconnect();
     callback listenbrainz-connect();
     callback listenbrainz-disconnect();
+    // Discord.
+    in-out property <bool> discord-enabled;
+    in-out property <string> discord-app-id;
+    in property <string> discord-status;
+    in-out property <bool> discord-mixes;
+    in-out property <bool> discord-radio;
+    callback discord-enabled-changed(bool);
+    callback discord-app-id-changed(string);
+    callback discord-mixes-changed(bool);
+    callback discord-radio-changed(bool);
     callback add-folder(int);              // 0 Music, 1 Mixes
     callback remove-folder(int, string);
     callback export-stations();
@@ -423,6 +433,36 @@ export component SettingsPanel inherits Rectangle {
                         }
                         if listenbrainz.message != "": Hint { text: listenbrainz.message; }
                         Hint { text: "Keys and tokens are kept in Melora's data folder, next to Melora.exe."; }
+
+                        Rectangle { height: 16px; }
+                        Heading { text: "Discord"; }
+                        CheckBox {
+                            text: "Show what I'm playing on my Discord profile";
+                            checked <=> discord-enabled;
+                            toggled => { discord-enabled-changed(self.checked); }
+                        }
+                        if discord-enabled: VerticalLayout {
+                            spacing: 6px;
+                            Hint { text: "Make an application at discord.com/developers/applications (its name shows after \"Listening to\"), and paste its Application ID here."; }
+                            LineEdit {
+                                text <=> root.discord-app-id;
+                                placeholder-text: "Application ID";
+                                accessible-label: "Discord application ID";
+                                edited(t) => { discord-app-id-changed(t); }
+                            }
+                            if discord-status != "": Hint { text: discord-status; }
+                            CheckBox {
+                                text: "Show mixes";
+                                checked <=> discord-mixes;
+                                toggled => { discord-mixes-changed(self.checked); }
+                            }
+                            CheckBox {
+                                text: "Show radio";
+                                checked <=> discord-radio;
+                                toggled => { discord-radio-changed(self.checked); }
+                            }
+                            Hint { text: "Discord can only show pictures from the web, so album covers are looked up on the Cover Art Archive, iTunes and Deezer, and DJ photos on Deezer. Nothing is looked up while this is off. Nothing shows while paused."; }
+                        }
 
                         Rectangle { height: 16px; }
                         Heading { text: "About"; }

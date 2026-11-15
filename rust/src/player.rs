@@ -11,15 +11,17 @@ use slint::{ComponentHandle, VecModel};
 
 use crate::bass::{self, Handle};
 use crate::db::{Db, Kind};
+use crate::discord::{Discord, Presence, Source};
 use crate::engine::Engine;
 use crate::library::Library;
 use crate::media::{self, Cover, Media};
+use crate::online::Query;
 use crate::queue::{Info, Queue, Repeat};
 use crate::rows::{self, ListRow, RowKind};
 use crate::scrobble::{self, Love, Scrobble};
 use crate::scrobbler::{self, Report, Scrobbler};
 use crate::tray::Tray;
-use crate::{AppWindow, Row, covers, library, logos, radio};
+use crate::{AppWindow, Row, covers, library, logos, online, radio};
 
 /// The Radio tab's place among the views.
 pub const RADIO: usize = 2;
@@ -132,6 +134,10 @@ pub struct Player {
     /// The track being listened to, and how long it's actually been heard, for scrobbling.
     pub listen: Option<Listen>,
     pub last_tick: Instant,
+    /// "Listening to" on Discord (None if the database couldn't open).
+    pub discord: Option<Discord>,
+    /// When the playing station was tuned in to (Unix ms), for Discord's time.
+    pub tuned_in_at: i64,
 }
 
 /// A play being listened to: it's scrobbled once enough has been heard (see scrobble.rs).
@@ -423,6 +429,7 @@ impl Player {
         }
         ui.set_now_playing(now.into());
         self.update_media();
+        self.update_discord();
         self.track_started(ui);
         ui.set_format_text(format.unwrap_or_default().into());
         ui.set_length(self.engine.length() as f32);
@@ -492,8 +499,110 @@ impl Player {
         }
     }
 
+    /// Tells Discord what's playing, as 2.x does. Paused or stopped shows nothing.
+    pub fn update_discord(&self) {
+        let Some(d) = &self.discord else { return };
+        let now_ms = online::now() * 1000;
+        let shown = match self.playing.filter(|_| self.engine.is_playing()) {
+            None => None,
+            Some((RADIO, i)) => self.stations.get(i).map(|st| {
+                let song = self
+                    .station_now
+                    .as_deref()
+                    .filter(|_| self.engine.is_live());
+                let (artist, title) = match song.map(|s| {
+                    s.split_once(" - ")
+                        .map_or((None, s), |(a, t)| (Some(a.trim()), t.trim()))
+                }) {
+                    Some((a, t)) => (a, Some(t)),
+                    None => (None, None),
+                };
+                Presence {
+                    source: Source::Radio,
+                    details: title.unwrap_or(&st.name).to_string(),
+                    state: artist.unwrap_or(&st.name).to_string(),
+                    large_text: Some(st.name.clone()),
+                    cover: artist.zip(title).map(|(a, t)| Query::Song {
+                        artist: a.into(),
+                        title: t.into(),
+                    }),
+                    start: Some(self.tuned_in_at),
+                    end: None,
+                }
+            }),
+            Some((v, i)) => self.views[v].lib.tracks.get(i).map(|t| {
+                let start = now_ms - (self.engine.position() * 1000.0) as i64;
+                let end = start + (self.engine.length() * 1000.0) as i64;
+                if self.views[v].kind == Kind::Mixes {
+                    Presence {
+                        source: Source::Mixes,
+                        details: t.title.clone(),
+                        state: t.artist.clone(),
+                        // The DJ's folder, unless it just repeats the artist line.
+                        large_text: (!t.collection.eq_ignore_ascii_case(&t.artist))
+                            .then(|| t.collection.clone()),
+                        cover: Some(Query::Artist(t.collection.clone())),
+                        start: Some(start),
+                        end: Some(end),
+                    }
+                } else {
+                    Presence {
+                        source: Source::Music,
+                        details: t.title.clone(),
+                        state: t.artist.clone(),
+                        large_text: t.album_tag.clone(),
+                        cover: t.album_tag.clone().map(|album| Query::Album {
+                            artist: t
+                                .album_artist_tag
+                                .clone()
+                                .unwrap_or_else(|| t.artist.clone()),
+                            album,
+                            sample: Some(t.path.clone()),
+                        }),
+                        start: Some(start),
+                        end: Some(end),
+                    }
+                }
+            }),
+        };
+        d.show(shown);
+    }
+
+    /// Settings' Discord section, from 2.x's settings.
+    pub fn show_discord(&self, ui: &AppWindow) {
+        let Some(db) = &self.db else { return };
+        ui.set_discord_enabled(db.setting("discord.enabled").as_deref() == Some("1"));
+        ui.set_discord_app_id(db.setting("discord.appId").unwrap_or_default().into());
+        ui.set_discord_mixes(db.setting("discord.mixes").as_deref() != Some("0"));
+        ui.set_discord_radio(db.setting("discord.radio").as_deref() != Some("0"));
+        if let Some(d) = &self.discord {
+            ui.set_discord_status(
+                d.status
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone()
+                    .into(),
+            );
+        }
+    }
+
+    /// A Discord setting changed: save it (an ID keeps only its digits) and have Discord catch up.
+    pub fn set_discord(&self, key: &str, value: &str) {
+        let value = if key == "discord.appId" {
+            value.chars().filter(char::is_ascii_digit).collect()
+        } else {
+            value.to_string()
+        };
+        self.save(key, &value);
+        if let Some(d) = &self.discord {
+            d.settings_changed();
+        }
+        self.update_discord();
+    }
+
     /// Tells the overlay the position after a jump.
     pub fn media_moved(&mut self) {
+        self.update_discord();
         let state = (self.engine.is_playing(), self.engine.position());
         if let Some(media) = &mut self.media {
             media.set_state(self.engine.is_loaded().then_some(state));
@@ -509,6 +618,7 @@ impl Player {
             if let Some(media) = &mut self.media {
                 media.set_state(state.map(|p| (p, pos)));
             }
+            self.update_discord(); // paused shows nothing; playing again starts the bar from here
         }
         if let Some(tray) = &mut self.tray {
             tray.set_playing(self.engine.is_playing(), self.engine.is_live());
@@ -1025,6 +1135,7 @@ impl Player {
         match result {
             Ok(h) => {
                 self.engine.play_live(h);
+                self.tuned_in_at = online::now() * 1000;
                 self.station_now = self.engine.stream_title();
             }
             Err(why) => self.station_now = Some(why),
