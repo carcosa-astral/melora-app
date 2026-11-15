@@ -5,7 +5,7 @@
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 /// The native window behind a Slint window, once it exists.
-fn hwnd(window: &slint::Window) -> Option<isize> {
+pub fn hwnd(window: &slint::Window) -> Option<isize> {
     let slint_handle = window.window_handle();
     let handle = slint_handle.window_handle().ok()?;
     match handle.as_raw() {

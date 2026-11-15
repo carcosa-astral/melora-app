@@ -117,6 +117,8 @@ export component AppWindow inherits Window {
     callback quit();
     // The tray icon was clicked or its menu used (see tray.rs Action).
     callback tray-action(int);
+    // The media overlay or a media key: a media::Command code, and seconds for a seek.
+    callback media-command(int, float);
 
     forward-focus: list;
 

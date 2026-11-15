@@ -12,6 +12,7 @@ use crate::bass::{self, Handle};
 use crate::db::{Db, Kind};
 use crate::engine::Engine;
 use crate::library::Library;
+use crate::media::{self, Cover, Media};
 use crate::queue::{Info, Queue, Repeat};
 use crate::rows::{self, ListRow, RowKind};
 use crate::tray::Tray;
@@ -119,6 +120,10 @@ pub struct Player {
     pub tray: Option<Tray>,
     /// Minimizing hides Melora to the tray (2.x's setting).
     pub minimize_to_tray: bool,
+    /// The Windows media overlay and media keys (None until the window exists, or if refused).
+    pub media: Option<Media>,
+    /// What the overlay was last told: None stopped, else playing or paused.
+    pub media_state: Option<bool>,
 }
 
 fn take<T>(slot: &Mutex<Option<T>>) -> Option<T> {
@@ -402,12 +407,93 @@ impl Player {
             tray.set_now_playing(&now);
         }
         ui.set_now_playing(now.into());
+        self.update_media();
         ui.set_format_text(format.unwrap_or_default().into());
         ui.set_length(self.engine.length() as f32);
         self.show_state(ui);
     }
 
+    /// Tells the overlay what's playing, with its cover (an album's, or a station's logo).
+    pub fn update_media(&mut self) {
+        if self.media.is_none() {
+            return;
+        }
+        let shown = match self.playing {
+            None => None,
+            Some((RADIO, i)) => self.stations.get(i).map(|st| {
+                let now = self
+                    .engine
+                    .is_live()
+                    .then_some(self.station_now.as_deref())
+                    .flatten();
+                let (artist, title) = media::split_station_title(now, &st.name);
+                let logo = self
+                    .logo_loader
+                    .as_ref()
+                    .and(self.db.as_ref())
+                    .and_then(|d| d.cover(&logos::key(&st.url)))
+                    .and_then(|(url, _)| url);
+                (
+                    title,
+                    artist,
+                    st.name.clone(),
+                    logo.map_or(Cover::None, Cover::Url),
+                    0.0,
+                )
+            }),
+            Some((v, i)) => {
+                let view = &self.views[v];
+                view.lib.tracks.get(i).map(|t| {
+                    let album = &view.lib.albums[t.album];
+                    let from = if view.kind == Kind::Mixes {
+                        t.collection.clone()
+                    } else {
+                        album.title.clone()
+                    };
+                    // shortcut: the cover is read on the UI thread (a folder picture or a tag);
+                    // move it to the cover loader if a slow drive makes track changes stutter.
+                    let cover = covers::find(Path::new(&album.sample_path))
+                        .map_or(Cover::None, Cover::Bytes);
+                    (
+                        t.title.clone(),
+                        t.artist.clone(),
+                        from,
+                        cover,
+                        self.engine.length(),
+                    )
+                })
+            }
+        };
+        let Some(media) = &mut self.media else { return };
+        match shown {
+            Some((title, artist, album, cover, length)) => {
+                media.show(&title, &artist, &album, cover, length)
+            }
+            None => {
+                media.set_state(None);
+                self.media_state = None;
+            }
+        }
+    }
+
+    /// Tells the overlay the position after a jump.
+    pub fn media_moved(&mut self) {
+        let state = (self.engine.is_playing(), self.engine.position());
+        if let Some(media) = &mut self.media {
+            media.set_state(self.engine.is_loaded().then_some(state));
+        }
+    }
+
     pub fn show_state(&mut self, ui: &AppWindow) {
+        // The overlay hears about playing and pausing as it happens; it moves the time on itself.
+        let state = self.engine.is_loaded().then(|| self.engine.is_playing());
+        if state != self.media_state {
+            self.media_state = state;
+            let pos = self.engine.position();
+            if let Some(media) = &mut self.media {
+                media.set_state(state.map(|p| (p, pos)));
+            }
+        }
         if let Some(tray) = &mut self.tray {
             tray.set_playing(self.engine.is_playing(), self.engine.is_live());
         }

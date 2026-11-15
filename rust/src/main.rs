@@ -8,6 +8,7 @@ mod engine;
 mod folder;
 mod library;
 mod logos;
+mod media;
 mod paths;
 mod player;
 mod queue;
@@ -188,6 +189,8 @@ fn main() -> Result<(), slint::PlatformError> {
         // Online lookups follow 2.x's "Find missing covers, DJ pictures and station logos online".
         logo_loader: online.then(|| logo_loader(&ui, &db_file, &base)),
         minimize_to_tray: to_tray,
+        media: None,
+        media_state: None,
         // Tray clicks and menu choices arrive off to the side; hand them to the window's thread.
         tray: tray::Tray::new({
             let weak = ui.as_weak();
@@ -253,7 +256,8 @@ fn main() -> Result<(), slint::PlatformError> {
     on!(on_previous, |p, ui| p.previous(&ui));
     on!(on_seek, |p, ui, seconds| {
         p.engine.seek(seconds.into());
-        p.show_state(&ui)
+        p.show_state(&ui);
+        p.media_moved()
     });
     on!(on_activate, |p, ui, row| p.activate(&ui, row));
     on!(on_move_selection, |p, ui, steps| p
@@ -313,6 +317,25 @@ fn main() -> Result<(), slint::PlatformError> {
         on,
         || logo_loader(&ui, &file, &b)
     ));
+
+    // The overlay's buttons and the media keys.
+    // Codes as main sends them below: Play, Pause, Toggle, Next, Previous, Stop, SeekTo.
+    on!(on_media_command, |p, ui, code, seconds| {
+        let playing = p.engine.is_playing();
+        match code {
+            0 if !playing => p.toggle_play(&ui),    // Play
+            1 | 5 if playing => p.toggle_play(&ui), // Pause, Stop
+            2 => p.toggle_play(&ui),                // Toggle
+            3 => p.next(&ui),
+            4 => p.previous(&ui),
+            6 => {
+                p.engine.seek(f64::from(seconds));
+                p.show_state(&ui);
+                p.media_moved();
+            }
+            _ => {}
+        }
+    });
 
     ui.on_quit(|| {
         let _ = slint::quit_event_loop();
@@ -458,10 +481,32 @@ fn main() -> Result<(), slint::PlatformError> {
 
     ui.show()?;
     // The native window exists once the event loop has started.
-    let weak = ui.as_weak();
+    let (weak, player_for_media) = (ui.as_weak(), player.clone());
     Timer::single_shot(Duration::ZERO, move || {
         if let Some(ui) = weak.upgrade() {
             window::apply(ui.window());
+            // The overlay needs the native window, which exists now.
+            let media = {
+                let weak = ui.as_weak();
+                media::Media::new(ui.window(), paths::data_dir(), move |c| {
+                    use media::Command;
+                    let (code, seconds) = match c {
+                        Command::Play => (0, 0.0),
+                        Command::Pause => (1, 0.0),
+                        Command::Toggle => (2, 0.0),
+                        Command::Next => (3, 0.0),
+                        Command::Previous => (4, 0.0),
+                        Command::Stop => (5, 0.0),
+                        Command::SeekTo(s) => (6, s as f32),
+                    };
+                    let _ = weak
+                        .upgrade_in_event_loop(move |ui| ui.invoke_media_command(code, seconds));
+                })
+            };
+            if let Ok(mut p) = player_for_media.try_borrow_mut() {
+                p.media = media;
+                p.update_media();
+            }
         }
     });
     let result = slint::run_event_loop();
