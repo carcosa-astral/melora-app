@@ -2,7 +2,7 @@
 import "fonts/IBMPlexSans-Regular.ttf";
 import "fonts/IBMPlexSans-SemiBold.ttf";
 import { Theme } from "theme.slint";
-import { IconButton, ThinSlider } from "controls.slint";
+import { IconButton, TabButton, ThinSlider } from "controls.slint";
 import { Row, TrackList } from "track_list.slint";
 
 export { Row }
@@ -33,10 +33,13 @@ export component AppWindow inherits Window {
     out property <length> list-view-height: list.view-height;
     // "1,234 tracks · 3d 4h", or what a scan is doing.
     in property <string> summary;
+    // 0 Music, 1 Mixes.
+    in property <int> tab;
     // While the seek bar is being dragged, playback mustn't move it back.
     out property <bool> seeking: seek-bar.dragging;
 
     callback add-folder();
+    callback show-tab(int);
     callback toggle-play();
     callback previous();
     callback next();
@@ -131,12 +134,19 @@ export component AppWindow inherits Window {
                 padding-top: 8px;
                 padding-bottom: 8px;
                 spacing: 12px;
-                Text {
-                    text: "Music";
-                    font-size: 15px;
-                    font-weight: 600;
-                    color: Theme.text;
-                    vertical-alignment: center;
+                HorizontalLayout {
+                    spacing: 4px;
+                    accessible-role: tab-list;
+                    TabButton {
+                        text: "Music";
+                        active: tab == 0;
+                        clicked => { show-tab(0); }
+                    }
+                    TabButton {
+                        text: "Mixes";
+                        active: tab == 1;
+                        clicked => { show-tab(1); }
+                    }
                 }
                 Text {
                     text: summary;
@@ -147,7 +157,7 @@ export component AppWindow inherits Window {
                 }
                 IconButton {
                     glyph: "\u{E8F4}";
-                    label: "Add music folder";
+                    label: tab == 0 ? "Add music folder" : "Add mixes folder";
                     size: 36px;
                     clicked => { add-folder(); }
                 }
@@ -162,14 +172,15 @@ export component AppWindow inherits Window {
                 alignment: center;
                 spacing: 8px;
                 Text {
-                    text: "No music yet";
+                    text: tab == 0 ? "No music yet" : "No mixes yet";
                     font-size: 15px;
                     font-weight: 600;
                     color: Theme.text;
                     horizontal-alignment: center;
                 }
                 Text {
-                    text: "Add a folder with the button at the top right.";
+                    text: tab == 0 ? "Add a folder with the button at the top right."
+                        : "Add the folder where you keep DJ sets and mixes, with the button at the top right.";
                     color: Theme.dim;
                     horizontal-alignment: center;
                 }
@@ -183,7 +194,7 @@ export component AppWindow inherits Window {
                 total-height: list-height;
                 view-changed => { list-view-changed(); }
                 selected <=> selected;
-                label: "Music";
+                label: tab == 0 ? "Music" : "Mixes";
                 move-selection(n) => { move-selection(n); }
                 activate(i) => { activate(i); }
             }

@@ -4,7 +4,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
-// kind: 0 album heading, 1 disc heading, 2 track.
+// kind: 0 album heading, 1 disc heading, 2 track, 3 DJ heading, 4 mix.
 export struct Row {
     kind: int,
     // Position in the whole list (not just the rows in view).
@@ -27,6 +27,9 @@ global Layout {
     out property <length> cover: 168px;          // rows.rs COVER_SIZE
     out property <length> margin: 20px;
     out property <length> indent: 20px + 168px + 20px;
+    // Mixes: the DJ's round picture, and their mixes lined up with their name (as in 2.x).
+    out property <length> dj-picture: 44px;      // rows.rs DJ_PICTURE_SIZE
+    out property <length> mix-indent: 20px + 44px + 12px;
 }
 
 component RowView inherits Rectangle {
@@ -40,16 +43,17 @@ component RowView inherits Rectangle {
     height: item.height;
     accessible-role: list-item;
     accessible-label: item.kind == 0 ? "Album: " + item.title + ", " + item.subtitle
+        : item.kind == 3 ? "DJ: " + item.title + ", " + item.subtitle
         : item.kind == 1 ? item.title
         : item.title + (item.subtitle == "" ? "" : ", " + item.subtitle) + ", " + item.length + (item.playing ? ", playing" : "");
-    accessible-item-selectable: item.kind == 2;
+    accessible-item-selectable: item.kind == 2 || item.kind == 4;
     accessible-item-selected: selected;
     accessible-item-index: index;
     accessible-item-count: count;
 
     // The selection only covers the track itself, never the cover beside it.
     if selected: Rectangle {
-        x: Layout.indent - 8px;
+        x: (item.kind == 4 ? Layout.mix-indent : Layout.indent) - 8px;
         width: parent.width - self.x - 12px;
         border-radius: 4px;
         background: Theme.panel;
@@ -113,6 +117,80 @@ component RowView inherits Rectangle {
         font-weight: 600;
         color: Theme.dim;
         vertical-alignment: center;
+    }
+
+    if item.kind == 3: Rectangle {
+        Rectangle {
+            x: Layout.margin;
+            y: Layout.margin;
+            width: Layout.dj-picture;
+            height: Layout.dj-picture;
+            border-radius: self.width / 2;
+            clip: true;
+            background: Theme.panel;
+            if !item.has-art: Text {
+                text: "\u{E77B}";
+                font-family: "Segoe Fluent Icons";
+                font-size: 16px;
+                color: Theme.dim;
+            }
+            if item.has-art: Image {
+                width: parent.width;
+                height: parent.height;
+                source: item.art;
+                image-fit: cover;
+            }
+        }
+        HorizontalLayout {
+            x: Layout.mix-indent;
+            y: Layout.margin;
+            height: Layout.dj-picture;
+            width: parent.width - self.x - 16px;
+            spacing: 12px;
+            Text {
+                text: item.title;
+                font-size: 16px;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            Text {
+                text: item.subtitle;
+                font-size: 12px;
+                color: Theme.dim;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+
+    if item.kind == 4: HorizontalLayout {
+        x: Layout.mix-indent;
+        width: parent.width - self.x - 20px;
+        spacing: 16px;
+        Text {
+            text: item.title;
+            color: item.playing ? Theme.accent : Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        Text {
+            text: item.subtitle;
+            color: Theme.dim;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 0.4;
+        }
+        Text {
+            text: item.length;
+            color: Theme.dim;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            min-width: 56px;
+        }
     }
 
     if item.kind == 2: HorizontalLayout {
@@ -202,10 +280,10 @@ export component TrackList inherits FocusScope {
             selected: row.index == root.selected;
             clicked => {
                 root.focus();
-                if (row.kind == 2) { root.selected = row.index; }
+                if (row.kind == 2 || row.kind == 4) { root.selected = row.index; }
             }
             double-clicked => {
-                if (row.kind == 2) { root.activate(row.index); }
+                if (row.kind == 2 || row.kind == 4) { root.activate(row.index); }
             }
         }
     }

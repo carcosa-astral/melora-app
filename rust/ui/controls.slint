@@ -141,3 +141,49 @@ export component IconButton inherits Rectangle {
         color: Theme.text;
     }
 }
+
+// A library tab ("Music", "Mixes"): bold and underlined in the accent when it's the open one.
+// The focus ring shows only for keyboard focus.
+export component TabButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    callback clicked();
+    property <bool> ring;
+
+    min-width: label.preferred-width + 16px;
+    height: 36px;
+    accessible-role: tab;
+    accessible-label: text;
+    accessible-item-selected: active;
+    accessible-action-default => { clicked(); }
+
+    focus := FocusScope {
+        focus-gained(reason) => { ring = reason == FocusReason.tab-navigation; }
+        key-pressed(e) => {
+            if (e.text == Key.Return || e.text == " ") { clicked(); return accept; }
+            reject
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { clicked(); }
+    }
+    Rectangle {
+        border-width: ring && focus.has-focus ? 2px : 0;
+        border-color: Theme.accent;
+        border-radius: 6px;
+    }
+    label := Text {
+        text: root.text;
+        font-size: 15px;
+        font-weight: active ? 600 : 400;
+        color: active || touch.has-hover ? Theme.text : Theme.dim;
+    }
+    Rectangle {
+        y: parent.height - 3px;
+        x: 8px;
+        width: parent.width - 16px;
+        height: 2px;
+        background: active ? Theme.accent : transparent;
+    }
+}

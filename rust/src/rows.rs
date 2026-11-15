@@ -1,12 +1,16 @@
 //! The library as list rows: a heading for each album (or DJ), a "Disc N" heading where an album
 //! has several discs, and its tracks. Kept apart from the UI so it can be tested without a window.
 
-use crate::library::Library;
+use crate::db::Kind;
+use crate::library::{Library, Track, mix_date};
 
 /// Row heights in pixels; the Slint list draws each kind at exactly this height.
 pub const ALBUM_HEIGHT: f32 = 68.0;
 pub const DISC_HEIGHT: f32 = 30.0;
 pub const TRACK_HEIGHT: f32 = 32.0;
+/// Mixes: a heading per DJ with their round picture, then their mixes.
+pub const DJ_HEIGHT: f32 = 70.0;
+pub const DJ_PICTURE_SIZE: f32 = 44.0;
 /// The album cover, drawn left of the album's title and tracks (as in 2.x), and the space an
 /// album takes at least so a short one leaves room for its cover: margin, cover, margin.
 pub const COVER_SIZE: f32 = 168.0;
@@ -17,6 +21,9 @@ pub enum RowKind {
     Album,
     Disc,
     Track,
+    /// Mixes: a DJ's heading, and one of their mixes.
+    Dj,
+    Mix,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -30,7 +37,8 @@ pub struct ListRow {
     pub length: String,
     /// For track rows: the index into `Library::tracks`.
     pub track: Option<usize>,
-    /// For album rows: the index into `Library::albums`.
+    /// For album rows, the index into `Library::albums`; for DJ rows, their first mix's album
+    /// (whose picture is the DJ's, as in 2.x).
     pub album: Option<usize>,
     /// Top of the row within the list, in pixels.
     pub y: f32,
@@ -48,34 +56,77 @@ pub fn clock(seconds: f64) -> String {
     }
 }
 
-/// "1,234 tracks  ·  3d 4h" (or "2h 5m", "45m"); empty for an empty library.
-pub fn summary(lib: &Library) -> String {
-    let n = lib.tracks.len();
-    if n == 0 {
-        return String::new();
-    }
+/// "1,234", with thousands separated.
+fn count(n: usize) -> String {
     let digits = n.to_string();
-    let mut count = String::new();
+    let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {
         if i > 0 && (digits.len() - i).is_multiple_of(3) {
-            count.push(',');
+            out.push(',');
         }
-        count.push(c);
+        out.push(c);
     }
-    let noun = if n == 1 { "track" } else { "tracks" };
-    let mins = lib.tracks.iter().map(|t| t.duration_ms).sum::<i64>() / 60_000;
+    out
+}
+
+/// "3d 4h", "2h 5m" or "45m".
+fn total(ms: i64) -> String {
+    let mins = ms / 60_000;
     let (d, h, m) = (mins / 1440, mins / 60 % 24, mins % 60);
-    let total = if d > 0 {
+    if d > 0 {
         format!("{d}d {h}h")
     } else if mins >= 60 {
         format!("{}h {m}m", mins / 60)
     } else {
         format!("{m}m")
-    };
-    format!("{count} {noun}  ·  {total}")
+    }
 }
 
-pub fn build(lib: &Library) -> Vec<ListRow> {
+/// "1,234 tracks  ·  3d 4h" (or mixes); empty for an empty library.
+pub fn summary(lib: &Library, kind: Kind) -> String {
+    let n = lib.tracks.len();
+    if n == 0 {
+        return String::new();
+    }
+    let noun = match (kind, n) {
+        (Kind::Music, 1) => "track",
+        (Kind::Music, _) => "tracks",
+        (Kind::Mixes, 1) => "mix",
+        (Kind::Mixes, _) => "mixes",
+    };
+    let ms = lib.tracks.iter().map(|t| t.duration_ms).sum();
+    format!("{} {noun}  ·  {}", count(n), total(ms))
+}
+
+/// A DJ's heading line: "12 mixes  ·  9h 30m  ·  2014–2025" (the years from the mixes' dates,
+/// when they have any).
+pub fn dj_summary(lib: &Library, mixes: &[&Track]) -> String {
+    let mut parts = vec![
+        if mixes.len() == 1 {
+            "1 mix".to_string()
+        } else {
+            format!("{} mixes", count(mixes.len()))
+        },
+        total(mixes.iter().map(|t| t.duration_ms).sum()),
+    ];
+    let years: Vec<i32> = mixes
+        .iter()
+        .filter_map(|t| mix_date(&t.title, lib.albums[t.album].year).map(|d| d.0))
+        .collect();
+    if let (Some(lo), Some(hi)) = (years.iter().min(), years.iter().max()) {
+        parts.push(if lo == hi {
+            lo.to_string()
+        } else {
+            format!("{lo}–{hi}")
+        });
+    }
+    parts.join("  ·  ")
+}
+
+pub fn build(lib: &Library, kind: Kind) -> Vec<ListRow> {
+    if kind == Kind::Mixes {
+        return build_mixes(lib);
+    }
     let mut rows = Vec::new();
     let mut y = 0.0;
     let mut album_top = f32::MIN;
@@ -83,7 +134,8 @@ pub fn build(lib: &Library) -> Vec<ListRow> {
         row.height = match row.kind {
             RowKind::Album => ALBUM_HEIGHT,
             RowKind::Disc => DISC_HEIGHT,
-            RowKind::Track => TRACK_HEIGHT,
+            RowKind::Track | RowKind::Mix => TRACK_HEIGHT,
+            RowKind::Dj => DJ_HEIGHT,
         };
         if row.kind == RowKind::Album {
             // A short album above still needs room for its cover.
@@ -151,6 +203,49 @@ pub fn build(lib: &Library) -> Vec<ListRow> {
                 ..blank()
             },
         );
+    }
+    rows
+}
+
+/// Mixes: each DJ (in list order, as `library::load` sorts them) with their mixes under them.
+fn build_mixes(lib: &Library) -> Vec<ListRow> {
+    let mut rows = Vec::new();
+    let mut y = 0.0;
+    let mut i = 0;
+    while i < lib.tracks.len() {
+        let dj = &lib.tracks[i].collection;
+        let end = (i..lib.tracks.len())
+            .find(|&j| lib.tracks[j].collection != *dj)
+            .unwrap_or(lib.tracks.len());
+        let mixes: Vec<&Track> = lib.tracks[i..end].iter().collect();
+        rows.push(ListRow {
+            kind: RowKind::Dj,
+            title: dj.clone(),
+            subtitle: dj_summary(lib, &mixes),
+            album: Some(lib.tracks[i].album),
+            y,
+            height: DJ_HEIGHT,
+            ..blank()
+        });
+        y += DJ_HEIGHT;
+        for (k, t) in mixes.iter().enumerate() {
+            rows.push(ListRow {
+                kind: RowKind::Mix,
+                title: t.title.clone(),
+                subtitle: t.artist.clone(),
+                length: if t.duration_ms > 0 {
+                    clock(t.duration_ms as f64 / 1000.0)
+                } else {
+                    String::new()
+                },
+                track: Some(i + k),
+                y,
+                height: TRACK_HEIGHT,
+                ..blank()
+            });
+            y += TRACK_HEIGHT;
+        }
+        i = end;
     }
     rows
 }
@@ -269,7 +364,7 @@ mod tests {
 
     #[test]
     fn headings_come_before_each_album_and_disc() {
-        let rows = build(&lib());
+        let rows = build(&lib(), Kind::Music);
         let shape: Vec<(RowKind, &str)> = rows.iter().map(|r| (r.kind, r.title.as_str())).collect();
         assert_eq!(
             shape,
@@ -295,7 +390,7 @@ mod tests {
 
     #[test]
     fn stepping_skips_headings_and_stops_at_the_ends() {
-        let rows = build(&lib()); // tracks at rows 2, 4 and 6
+        let rows = build(&lib(), Kind::Music); // tracks at rows 2, 4 and 6
         assert_eq!(step(&rows, None, 1), Some(2));
         assert_eq!(step(&rows, Some(2), 1), Some(4));
         assert_eq!(step(&rows, Some(4), 1), Some(6));
@@ -312,7 +407,7 @@ mod tests {
         let mut l = lib();
         let t = l.tracks[2].clone();
         l.tracks = vec![t; 100]; // one album heading, then 100 tracks
-        let rows = build(&l);
+        let rows = build(&l, Kind::Music);
         assert_eq!(in_view(&rows, 0.0, 200.0), 0..10); // the heading and 5 tracks start above 200 px, then 4 spare
         let r = in_view(&rows, 150.0, 100.0);
         assert_eq!(r.start, 0); // the heading stays while its cover shows
@@ -324,7 +419,7 @@ mod tests {
 
     #[test]
     fn scrolling_to_a_row_moves_as_little_as_possible() {
-        let rows = build(&lib()); // Alpha 0-68, Disc 1 68-98, One 98-130, Disc 2 130-160, Two 160-192, Beta 196-264, Solo 264-296
+        let rows = build(&lib(), Kind::Music); // Alpha 0-68, Disc 1 68-98, One 98-130, Disc 2 130-160, Two 160-192, Beta 196-264, Solo 264-296
         assert_eq!(rows[5].y, MIN_ALBUM_BLOCK); // Alpha is short, so Beta waits for its cover
         assert_eq!(total_height(&rows), 196.0 + MIN_ALBUM_BLOCK);
         assert_eq!(scroll_to(&rows, 2, 0.0, 200.0), 0.0); // already in view
@@ -336,13 +431,53 @@ mod tests {
     #[test]
     fn summary_counts_and_totals() {
         let mut l = lib();
-        assert_eq!(summary(&l), "3 tracks  ·  9m");
+        assert_eq!(summary(&l, Kind::Music), "3 tracks  ·  9m");
         l.tracks.truncate(1);
-        assert_eq!(summary(&l), "1 track  ·  3m");
+        assert_eq!(summary(&l, Kind::Music), "1 track  ·  3m");
+        assert_eq!(summary(&l, Kind::Mixes), "1 mix  ·  3m");
         let t = l.tracks[0].clone();
         l.tracks = vec![t; 1234];
-        assert_eq!(summary(&l), "1,234 tracks  ·  2d 16h");
-        assert_eq!(summary(&Library::default()), "");
+        assert_eq!(summary(&l, Kind::Music), "1,234 tracks  ·  2d 16h");
+        assert_eq!(summary(&Library::default(), Kind::Music), "");
+    }
+
+    #[test]
+    fn mixes_get_a_heading_per_dj_with_a_summary() {
+        let mix = |path: &str, title: &str, ms: i64| TrackRow {
+            stored_path: path.into(),
+            title: Some(title.into()),
+            artist: Some("Someone".into()),
+            duration_ms: ms,
+            ..TrackRow::default()
+        };
+        let l = load(
+            &[
+                mix(r"D:\Mixes\Zed\a.mp3", "Late (2021-01-01)", 3_600_000),
+                mix(r"D:\Mixes\Zed\b.mp3", "Early (2014-05-05)", 1_800_000),
+                mix(r"D:\Mixes\Amy\c.mp3", "Undated", 2_700_000),
+            ],
+            Kind::Mixes,
+            &[r"D:\Mixes".into()],
+            r"C:\Melora",
+        );
+        let rows = build(&l, Kind::Mixes);
+        let shape: Vec<(RowKind, &str, &str)> = rows
+            .iter()
+            .map(|r| (r.kind, r.title.as_str(), r.subtitle.as_str()))
+            .collect();
+        assert_eq!(
+            shape,
+            [
+                (RowKind::Dj, "Amy", "1 mix  ·  45m"),
+                (RowKind::Mix, "Undated", "Someone"),
+                (RowKind::Dj, "Zed", "2 mixes  ·  1h 30m  ·  2014–2021"),
+                (RowKind::Mix, "Early (2014-05-05)", "Someone"),
+                (RowKind::Mix, "Late (2021-01-01)", "Someone"),
+            ]
+        );
+        assert_eq!(rows[2].y, DJ_HEIGHT + TRACK_HEIGHT);
+        assert_eq!(step(&rows, Some(1), 1), Some(3)); // over the next DJ's heading
+        assert_eq!(summary(&l, Kind::Mixes), "3 mixes  ·  2h 15m");
     }
 
     #[test]

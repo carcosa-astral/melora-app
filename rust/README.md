@@ -17,7 +17,14 @@ Phase 2, in progress:
 - Done: album covers, laid out as in 2.x (168 px on the left of each album). Found in the album's
   folder (cover, folder, front or album .jpg/.jpeg/.png, also above CD1\ folders) or embedded in its
   files, then shrunk to the size shown on a worker thread. Only covers near the view are kept.
-- Next: the Mixes screen and DJ pictures, folder watching, shuffle and repeat.
+- Done: the Mixes screen. Music and Mixes tabs, each keeping its own place. Mixes are grouped by DJ
+  (the folder under the mixes folder), oldest first, with the DJ's picture (from their first mix,
+  as in 2.x) and "12 mixes · 9h 30m · 2014–2025". A mixes folder inside the music folder only
+  shows in Mixes. The first scan of 1,370 mixes took about 3 seconds.
+- Next: folder watching, shuffle and repeat.
+
+Known difference from 2.x: covers and DJ pictures have square corners. Slint's software renderer
+doesn't round the corners of a clipped picture.
 
 The list draws only the rows on screen, at positions worked out in Rust, so it stays light however
 big the library is.
@@ -48,6 +55,7 @@ cargo build --release
 | `src/db.rs` | `data\melora.db`, in exactly 2.x's tables |
 | `src/library.rs` | Scanning folders and grouping tracks into albums and DJs, with 2.x's rules |
 | `src/covers.rs` | Finding album covers and shrinking them on a worker thread |
+| `src/player.rs` | The two libraries, the tab on screen, and what's playing |
 | `src/rows.rs` | The list's rows (headings and tracks), their positions, and keyboard steps |
 | `src/backdrop.rs` | Dark title bar on Windows |
 | `ui/app.slint` | The window |
