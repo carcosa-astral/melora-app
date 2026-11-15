@@ -1,16 +1,20 @@
-// Melora 3.0, phase 1: a folder's tracks, played in order without gaps. Colours and fonts match 2.x.
+// Melora 3.0: a folder's tracks, played in order without gaps. Nord colours, IBM Plex Sans.
 import "fonts/IBMPlexSans-Regular.ttf";
 import "fonts/IBMPlexSans-SemiBold.ttf";
 import { StandardListView } from "std-widgets.slint";
 
+// Nord, deepened for contrast; solid colours only (no transparency, no Mica, no tint from covers).
+// Contrast on the background: text 13.7:1, dim 9.4:1, accent 7.9:1, error 5.1:1, ok 7.7:1.
 global Theme {
-    out property <color> background: #17171A;
-    out property <color> text: #ECECEF;
-    out property <color> dim: #8E8E96;
-    out property <color> accent: #9BB0FF;
-    out property <color> hover: #FFFFFF0E;
-    out property <color> divider: #FFFFFF14;
-    out property <color> track: #FFFFFF26;
+    out property <color> background: #1F232A; // deep polar night
+    out property <color> panel: #2E3440;      // nord0: hover, raised areas
+    out property <color> divider: #3B4252;    // nord1
+    out property <color> track: #434C5E;      // nord2: empty part of a slider
+    out property <color> text: #ECEFF4;       // nord6
+    out property <color> dim: #C0C8D6;
+    out property <color> accent: #88C0D0;     // nord8, frost
+    out property <color> error: #D57780;      // nord11, lightened to stay readable
+    out property <color> ok: #A3BE8C;         // nord14
 }
 
 // 2.x's thin slider: clicking jumps to the spot, dragging follows the mouse, and the arrow keys
@@ -127,7 +131,7 @@ component IconButton inherits Rectangle {
     width: size;
     height: size;
     border-radius: size / 2;
-    background: touch.has-hover && enabled ? Theme.hover : transparent;
+    background: touch.has-hover && enabled ? Theme.panel : transparent;
     border-width: focus.has-focus ? 2px : 0;
     border-color: Theme.accent;
     opacity: enabled ? 1 : 0.4;

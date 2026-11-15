@@ -20,8 +20,6 @@ Measured (release build, software renderer): 8.9 MB for the exe and BASS DLLs, a
 memory, window up in well under a second.
 
 Still to do in phase 1:
-- Mica: the window shows the solid fallback colour. The software renderer draws an opaque window;
-  Slint's OpenGL renderer could be transparent but used about 50 MB more memory here.
 - Listening closely to a join between two tracks that run into each other (the hand-over itself
   is checked in the app and by the tests).
 
@@ -67,4 +65,19 @@ Approved by Griff on 2026-11-15 for the 3.0 rewrite, when the no-crates rule was
 
 ## Design
 
-Melora 2.x's own look: the colours from `../src/Melora/App.xaml`, IBM Plex Sans, Segoe Fluent Icons.
+Nord, deepened for contrast, with IBM Plex Sans and Segoe Fluent Icons. Solid colours only: no Mica,
+no transparency, and no accent taken from album covers (2.x's "Tint Melora" is not coming to 3.0).
+Drawn by Slint's software renderer, which here started faster and used about 50 MB less memory
+than its OpenGL one.
+
+| Role | Colour | Contrast on the background |
+|---|---|---|
+| Background | `#1F232A` | |
+| Panel, hover | `#2E3440` (nord0) | |
+| Divider | `#3B4252` (nord1) | |
+| Slider track | `#434C5E` (nord2) | |
+| Text | `#ECEFF4` (nord6) | 13.7 : 1 |
+| Dim text | `#C0C8D6` | 9.4 : 1 |
+| Accent | `#88C0D0` (nord8) | 7.9 : 1 |
+| Error | `#D57780` (nord11, lightened) | 5.1 : 1 |
+| OK | `#A3BE8C` (nord14) | 7.7 : 1 |

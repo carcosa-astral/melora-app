@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Melora 3.0 phase 1 (in progress): it plays a folder in order without gaps, using the 2.x engine
   ported to Rust with its tests, with Previous, Next and the usual keys.
 
+### Changed
+- Melora 3.0 gets its own look: Nord, deepened for contrast, in solid colours. It drops 2.x's Mica
+  backdrop and the accent colour taken from album covers, and stays on Slint's software renderer.
+
 ## [2.0.0] - 2026-11-04
 
 Smoother playback, radio logos, and a keyboard and screen-reader pass.

@@ -1,7 +1,5 @@
 //! The dark title bar on Windows (as in Melora 2.x). Elsewhere it does nothing.
-//!
-//! Mica isn't used yet: Slint's software renderer draws an opaque window, so there's nothing for
-//! the backdrop to show through. See rust/README.md.
+//! 3.0 uses solid colours only, so there's no Mica (see Design in rust/README.md).
 
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
