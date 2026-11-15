@@ -198,10 +198,11 @@ impl Player {
             let mut row = to_row(&view.rows[r], r, Some(r) == playing);
             if let Some(a) = view.rows[r].album {
                 // Pictures are made at the size they're shown, in real pixels.
-                let size = if view.rows[r].kind == RowKind::Dj {
-                    rows::DJ_PICTURE_SIZE
+                // DJ pictures are round, covers have 6 px corners, as in 2.x.
+                let (size, radius) = if view.rows[r].kind == RowKind::Dj {
+                    (rows::DJ_PICTURE_SIZE, rows::DJ_PICTURE_SIZE / 2.0)
                 } else {
-                    rows::COVER_SIZE
+                    (rows::COVER_SIZE, 6.0)
                 };
                 let key = &view.lib.albums[a].sample_path;
                 keys.push(key.clone());
@@ -210,8 +211,8 @@ impl Player {
                     Some(None) => {}
                     None => {
                         if self.pending.insert(key.clone()) {
-                            self.loader
-                                .request(key.clone(), (size * scale).round() as u32);
+                            let px = (size * scale).round() as u32;
+                            self.loader.request(key.clone(), px, radius * scale);
                         }
                     }
                 }

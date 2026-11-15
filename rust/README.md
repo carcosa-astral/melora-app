@@ -23,8 +23,8 @@ Phase 2, in progress:
   shows in Mixes. The first scan of 1,370 mixes took about 3 seconds.
 - Next: folder watching, shuffle and repeat.
 
-Known difference from 2.x: covers and DJ pictures have square corners. Slint's software renderer
-doesn't round the corners of a clipped picture.
+Covers have 6 px rounded corners and DJ pictures are round, as in 2.x. The rounding is baked into
+the picture when it's shrunk, because Slint's software renderer doesn't round a cropped image.
 
 The list draws only the rows on screen, at positions worked out in Rust, so it stays light however
 big the library is.
