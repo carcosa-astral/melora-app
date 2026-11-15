@@ -62,7 +62,7 @@ pub fn clock(seconds: f64) -> String {
 }
 
 /// "1,234", with thousands separated.
-fn count(n: usize) -> String {
+pub fn count(n: usize) -> String {
     let digits = n.to_string();
     let mut out = String::new();
     for (i, c) in digits.chars().enumerate() {

@@ -353,7 +353,9 @@ impl Player {
                 match (&self.station_now, self.engine.is_live()) {
                     (Some(song), true) => song.clone(),
                     (Some(status), false) => format!("{name}  ·  {status}"),
-                    (None, _) => name.to_string(),
+                    // Playing, but the station hasn't said what: "Live", as in 2.x.
+                    (None, true) => format!("{name}  ·  Live"),
+                    (None, false) => name.to_string(),
                 }
             }
             Some((v, i)) => {
@@ -374,7 +376,7 @@ impl Player {
                 let parts = [
                     (!codec.is_empty()).then(|| codec.to_string()),
                     (freq > 0).then(|| format!("{} kHz", f64::from(freq) / 1000.0)),
-                    (kbps > 0).then(|| format!("{kbps} kbps")),
+                    (kbps > 0).then(|| format!("{} kbps", rows::count(kbps as usize))),
                     Some(layout),
                 ];
                 parts
