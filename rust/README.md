@@ -42,7 +42,7 @@ Phase 4, in progress:
 - Done: the tray icon, as in 2.x. Left-click shows or hides Melora; right-click has what's playing,
   Play/Pause (Stop for radio), Next, Previous, Show Melora and Quit; the tooltip says what's
   playing. Minimizing hides to the tray (2.x's `minimizeToTray` setting, on unless turned off).
-  Ctrl+Q quits. Not yet: 2.x's one-time "Melora is in the system tray" balloon.
+  Ctrl+Q quits. The first time it hides there, a balloon says so (once ever, as in 2.x).
 - Next: media keys and the Windows media overlay, then Settings, scrobbling and Discord.
 
 Covers have 6 px rounded corners and DJ pictures are round, as in 2.x. The rounding is baked into

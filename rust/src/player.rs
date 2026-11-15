@@ -532,6 +532,22 @@ impl Player {
         self.queue_next();
     }
 
+    /// The first time Melora hides in the tray, a balloon says where it went (once ever, as 2.x).
+    pub fn first_time_in_tray(&self) {
+        let shown = self.db.as_ref().and_then(|d| d.setting("trayHintShown"));
+        if shown.as_deref() == Some("1") {
+            return;
+        }
+        if let Some(tray) = &self.tray
+            && tray.show_balloon(
+                "Melora is in the system tray",
+                "Click the tray icon to bring it back.",
+            )
+        {
+            self.save("trayHintShown", "1");
+        }
+    }
+
     /// Saved when Melora closes rather than on every step of the slider (as 2.x does).
     pub fn save_volume(&self, ui: &AppWindow) {
         self.save("volume", &format!("{}", ui.get_volume() / 100.0));

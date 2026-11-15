@@ -107,6 +107,14 @@ impl Tray {
         })
     }
 
+    /// A balloon on the tray icon, as 2.x shows the first time Melora hides there.
+    pub fn show_balloon(&self, title: &str, text: &str) -> bool {
+        // shortcut: tray-icon doesn't expose its window, so this relies on its hidden window's
+        // class name ("tray_icon_app") and on our icon being its first (number 1); check both
+        // if tray-icon is upgraded and the balloon stops showing.
+        crate::window::tray_balloon("tray_icon_app", 1, title, text)
+    }
+
     /// What's playing, for the tooltip and the top of the menu; empty for nothing.
     pub fn set_now_playing(&self, text: &str) {
         let shown = if text.is_empty() {

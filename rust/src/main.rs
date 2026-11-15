@@ -368,8 +368,13 @@ fn main() -> Result<(), slint::PlatformError> {
     ticker.start(TimerMode::Repeated, Duration::from_millis(40), move || {
         if let Some(ui) = weak.upgrade() {
             p.borrow_mut().tick(&ui);
-            if to_tray && p.borrow().tray.is_some() && window::is_minimized(ui.window()) {
+            if to_tray
+                && p.borrow().tray.is_some()
+                && window::is_minimized(ui.window())
+                && window::is_visible(ui.window())
+            {
                 window::hide(ui.window());
+                p.borrow().first_time_in_tray();
             }
         }
     });
