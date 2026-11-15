@@ -10,16 +10,6 @@ use crate::covers::thumbnail;
 use crate::db::Db;
 use crate::online::{self, Query};
 
-fn download(agent: &ureq::Agent, url: &str) -> Option<Vec<u8>> {
-    let mut response = agent.get(url).call().ok()?;
-    response
-        .body_mut()
-        .with_config()
-        .limit(5 * 1024 * 1024)
-        .read_to_vec()
-        .ok()
-}
-
 type Done = Vec<(String, Option<SharedPixelBuffer<Rgba8Pixel>>)>;
 
 /// Finds and fetches logos on its own thread, one station at a time.
@@ -47,7 +37,7 @@ impl Loader {
                     name,
                 };
                 let logo = online::find(&db, &agent, &query, online::now())
-                    .and_then(|l| download(&agent, &l))
+                    .and_then(|l| online::download(&agent, &l))
                     .and_then(|bytes| thumbnail(&bytes, px, px as f32 / 2.0));
                 out.lock()
                     .unwrap_or_else(|e| e.into_inner())

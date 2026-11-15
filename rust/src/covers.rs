@@ -10,7 +10,9 @@ use lofty::picture::PictureType;
 use lofty::prelude::*;
 use slint::{Rgba8Pixel, SharedPixelBuffer};
 
+use crate::db::Db;
 use crate::library::disc_folder_number;
+use crate::online::{self, Query};
 
 const NAMES: [&str; 4] = ["cover", "folder", "front", "album"];
 const EXTENSIONS: [&str; 3] = ["jpg", "jpeg", "png"];
@@ -113,23 +115,54 @@ fn round_corners(img: &mut image::RgbaImage, radius: f32) {
 type Done = Vec<(String, Option<SharedPixelBuffer<Rgba8Pixel>>)>;
 
 /// Finds and shrinks covers on its own thread, one at a time, in the order asked.
+type Request = (String, u32, f32, Option<Query>);
+
+/// A picture found online for an album or DJ without one: saved earlier, or looked up, fetched
+/// and saved now in `data\covers` (the music's own folders are never written to), as 2.x does.
+fn online_picture(db: Option<&Db>, agent: &ureq::Agent, q: &Query) -> Option<Vec<u8>> {
+    let file = online::saved_file(q);
+    if let Ok(bytes) = std::fs::read(&file) {
+        return Some(bytes);
+    }
+    let url = online::find(db?, agent, q, online::now())?;
+    let bytes = online::download(agent, &url).filter(|b| image::load_from_memory(b).is_ok())?;
+    let saved = file
+        .parent()
+        .map(std::fs::create_dir_all)
+        .transpose()
+        .and_then(|_| std::fs::write(&file, &bytes));
+    if let Err(e) = saved {
+        crate::log::write(&format!("Couldn't save a cover in {}: {e}", file.display()));
+    }
+    Some(bytes)
+}
+
 pub struct Loader {
-    requests: Sender<(String, u32, f32)>,
+    requests: Sender<Request>,
     /// Finished covers (None: the album has none), keyed by its sample track's path.
     pub done: Arc<Mutex<Done>>,
 }
 
 impl Loader {
-    /// `notify` is called (on the worker) after each cover, to get the UI to collect it.
-    pub fn new(notify: impl Fn() + Send + 'static) -> Loader {
-        let (requests, rx) = channel::<(String, u32, f32)>();
+    /// `db_file` and `base` let the worker look pictures up online (its own connection, as the
+    /// scanner has). `notify` is called (on the worker) after each cover.
+    pub fn new(
+        db_file: std::path::PathBuf,
+        base: String,
+        notify: impl Fn() + Send + 'static,
+    ) -> Loader {
+        let (requests, rx) = channel::<Request>();
         let done: Arc<Mutex<Done>> = Arc::default();
         let out = done.clone();
         std::thread::spawn(move || {
+            let db = Db::open(&db_file, &base).ok();
+            let agent = online::agent();
             // shortcut: covers asked for and then scrolled past are still made, in order; skip
             // stale ones if fast scrolling through a big library feels slow.
-            for (key, px, radius) in rx {
-                let cover = find(Path::new(&key)).and_then(|b| thumbnail(&b, px, radius));
+            for (key, px, radius, query) in rx {
+                let bytes = find(Path::new(&key))
+                    .or_else(|| query.and_then(|q| online_picture(db.as_ref(), &agent, &q)));
+                let cover = bytes.and_then(|b| thumbnail(&b, px, radius));
                 out.lock()
                     .unwrap_or_else(|e| e.into_inner())
                     .push((key, cover));
@@ -139,10 +172,11 @@ impl Loader {
         Loader { requests, done }
     }
 
-    /// Asks for a picture `px` wide with corners rounded by `radius` pixels.
-    pub fn request(&self, key: String, px: u32, radius: f32) {
+    /// Asks for a picture `px` wide with corners rounded by `radius` pixels; `online` is what to
+    /// look up when the album or DJ has no picture of its own (None: don't).
+    pub fn request(&self, key: String, px: u32, radius: f32, online: Option<Query>) {
         // Only fails once the worker is gone, when there's nobody left to show covers to.
-        let _ = self.requests.send((key, px, radius));
+        let _ = self.requests.send((key, px, radius, online));
     }
 }
 

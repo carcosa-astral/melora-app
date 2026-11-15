@@ -334,6 +334,71 @@ pub fn find(db: &Db, agent: &ureq::Agent, q: &Query, now: i64) -> Option<String>
     found
 }
 
+/// SHA-1 of some bytes, in hex: 2.x names saved pictures after it.
+pub fn sha1_hex(data: &[u8]) -> String {
+    let mut h: [u32; 5] = [
+        0x6745_2301,
+        0xEFCD_AB89,
+        0x98BA_DCFE,
+        0x1032_5476,
+        0xC3D2_E1F0,
+    ];
+    let mut msg = data.to_vec();
+    msg.push(0x80);
+    while msg.len() % 64 != 56 {
+        msg.push(0);
+    }
+    msg.extend((data.len() as u64 * 8).to_be_bytes());
+    for block in msg.chunks(64) {
+        let mut w = [0u32; 80];
+        for (i, word) in block.chunks(4).enumerate() {
+            w[i] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
+        }
+        for i in 16..80 {
+            w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
+        }
+        let [mut a, mut b, mut c, mut d, mut e] = h;
+        for (i, wi) in w.iter().enumerate() {
+            let (f, k) = match i {
+                0..=19 => ((b & c) | (!b & d), 0x5A82_7999),
+                20..=39 => (b ^ c ^ d, 0x6ED9_EBA1),
+                40..=59 => ((b & c) | (b & d) | (c & d), 0x8F1B_BCDC),
+                _ => (b ^ c ^ d, 0xCA62_C1D6),
+            };
+            let t = a
+                .rotate_left(5)
+                .wrapping_add(f)
+                .wrapping_add(e)
+                .wrapping_add(k)
+                .wrapping_add(*wi);
+            (e, d, c, b, a) = (d, c, b.rotate_left(30), a, t);
+        }
+        for (x, y) in h.iter_mut().zip([a, b, c, d, e]) {
+            *x = x.wrapping_add(y);
+        }
+    }
+    h.iter().map(|x| format!("{x:08x}")).collect()
+}
+
+/// Where a picture found online for this query is saved: `data\covers\<first 16 of the key's
+/// SHA-1>.jpg`, as 2.x saves them, so pictures 2.x found are used as they are.
+pub fn saved_file(q: &Query) -> std::path::PathBuf {
+    crate::paths::data_dir()
+        .join("covers")
+        .join(format!("{}.jpg", &sha1_hex(key(q).as_bytes())[..16]))
+}
+
+/// A picture from the web (at most 5 MB); None if it can't be fetched.
+pub fn download(agent: &ureq::Agent, url: &str) -> Option<Vec<u8>> {
+    let mut response = agent.get(url).call().ok()?;
+    response
+        .body_mut()
+        .with_config()
+        .limit(5 * 1024 * 1024)
+        .read_to_vec()
+        .ok()
+}
+
 pub fn now() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -384,6 +449,14 @@ mod tests {
             Some("plain")
         );
         assert_eq!(pick("Someone Else", "Genesis", &results), None);
+    }
+
+    #[test]
+    fn sha1_matches_the_standard() {
+        assert_eq!(sha1_hex(b""), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+        assert_eq!(sha1_hex(b"abc"), "a9993e364706816aba3e25717850c26c9cd0d89d");
+        let long = b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+        assert_eq!(sha1_hex(long), "84983e441c3bd26ebaae4aa1f95129e5e54670f1");
     }
 
     #[test]

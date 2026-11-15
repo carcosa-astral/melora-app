@@ -323,7 +323,27 @@ impl Player {
                     None => {
                         if self.pending.insert(key.clone()) {
                             let px = (size * scale).round() as u32;
-                            self.loader.request(key.clone(), px, radius * scale);
+                            // With online pictures on: the album (when tagged as one) or the DJ.
+                            let album = &view.lib.albums[a];
+                            let online =
+                                self.logo_loader
+                                    .as_ref()
+                                    .and_then(|_| match view.rows[r].kind {
+                                        RowKind::Dj if !view.rows[r].title.is_empty() => {
+                                            Some(Query::Artist(view.rows[r].title.clone()))
+                                        }
+                                        RowKind::Album
+                                            if album.tagged && album.artist != "Unknown Artist" =>
+                                        {
+                                            Some(Query::Album {
+                                                artist: album.artist.clone(),
+                                                album: album.title.clone(),
+                                                sample: Some(album.sample_path.clone()),
+                                            })
+                                        }
+                                        _ => None,
+                                    });
+                            self.loader.request(key.clone(), px, radius * scale, online);
                         }
                     }
                 }
@@ -1022,6 +1042,9 @@ impl Player {
         self.save("onlineArt", if on { "1" } else { "0" });
         self.logos.clear();
         self.logos_pending.clear();
+        // Covers found online show, or stop showing, too.
+        self.covers.clear();
+        self.pending.clear();
         self.logo_loader = on.then(loader);
         self.refresh_view(ui);
     }

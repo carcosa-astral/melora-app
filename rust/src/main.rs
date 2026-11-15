@@ -182,7 +182,7 @@ fn main() -> Result<(), slint::PlatformError> {
         model,
         covers: HashMap::new(),
         pending: HashSet::new(),
-        loader: covers::Loader::new({
+        loader: covers::Loader::new(db_file.clone(), base.clone(), {
             let weak = ui.as_weak();
             move || {
                 let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_covers_ready());

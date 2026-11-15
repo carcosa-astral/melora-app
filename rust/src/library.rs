@@ -24,6 +24,8 @@ pub struct Album {
     pub year: i32,
     /// A track of the album, to find its cover from.
     pub sample_path: String,
+    /// The title is an album tag (not just the folder's name), so it can be looked up online.
+    pub tagged: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -155,6 +157,7 @@ pub fn load(rows: &[TrackRow], kind: Kind, roots: &[String], base: &str) -> Libr
         }
         index.insert(f.key.as_str(), albums.len());
         albums.push(Album {
+            tagged: f.album.is_some(),
             title: f
                 .album
                 .clone()
