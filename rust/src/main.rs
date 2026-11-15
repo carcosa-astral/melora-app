@@ -3,65 +3,97 @@
 
 mod backdrop;
 mod bass;
-#[allow(dead_code)] // wired to the Music screen in the next step of phase 2
 mod db;
 mod engine;
 mod folder;
-#[allow(dead_code)]
 mod library;
-#[allow(dead_code)]
 mod paths;
+mod rows;
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
+use db::{Db, Kind};
 use engine::Engine;
-use slint::{ComponentHandle, Model, StandardListViewItem, Timer, TimerMode, VecModel};
+use library::Library;
+use rows::ListRow;
+use slint::{ComponentHandle, Model, Timer, TimerMode, VecModel};
 
 slint::include_modules!();
 
-/// Two clicks on the same row within this long play it.
-const DOUBLE_CLICK: Duration = Duration::from_millis(450);
-
-/// What's loaded and where we are in it. Owned by the UI thread.
+/// What's in the library and what's playing. Owned by the UI thread.
 struct Player {
     engine: Engine,
-    tracks: Vec<PathBuf>,
-    rows: Rc<VecModel<StandardListViewItem>>,
+    lib: Library,
+    rows: Vec<ListRow>,
+    model: Rc<VecModel<Row>>,
+    /// The list row of each track.
+    track_rows: Vec<usize>,
+    /// The track playing (or paused), as an index into `lib.tracks`.
     index: Option<usize>,
-    last_click: Option<(i32, Instant)>,
+}
+
+fn to_row(r: &ListRow, playing: bool) -> Row {
+    Row {
+        kind: match r.kind {
+            rows::RowKind::Album => 0,
+            rows::RowKind::Disc => 1,
+            rows::RowKind::Track => 2,
+        },
+        title: r.title.as_str().into(),
+        subtitle: r.subtitle.as_str().into(),
+        number: r.number.as_str().into(),
+        length: r.length.as_str().into(),
+        y: r.y,
+        height: r.height,
+        playing,
+    }
 }
 
 impl Player {
-    fn load_folder(&mut self, ui: &AppWindow, dir: &Path, start: Option<&Path>) {
-        self.engine.stop();
-        self.index = None;
-        self.tracks = folder::audio_files(dir);
-        self.rows.set_vec(
-            self.tracks
+    /// Shows a freshly loaded library, keeping what's playing and what's selected.
+    fn set_library(&mut self, ui: &AppWindow, lib: Library) {
+        let path_of = |lib: &Library, i: usize| lib.tracks.get(i).map(|t| t.path.clone());
+        let playing = self.index.and_then(|i| path_of(&self.lib, i));
+        let selected = usize::try_from(ui.get_selected())
+            .ok()
+            .and_then(|r| self.rows.get(r))
+            .and_then(|r| r.track)
+            .and_then(|i| path_of(&self.lib, i));
+
+        self.lib = lib;
+        self.rows = rows::build(&self.lib);
+        self.track_rows = self
+            .rows
+            .iter()
+            .enumerate()
+            .filter_map(|(r, row)| row.track.map(|_| r))
+            .collect();
+        let find = |path: Option<String>| {
+            path.and_then(|p| self.lib.tracks.iter().position(|t| t.path == p))
+        };
+        self.index = find(playing);
+        let selected = find(selected).map(|i| self.track_rows[i]);
+
+        self.model.set_vec(
+            self.rows
                 .iter()
-                .map(|p| row_text(p, false))
+                .map(|r| to_row(r, r.track.is_some() && r.track == self.index))
                 .collect::<Vec<_>>(),
         );
-        ui.set_selected(-1);
-        if self.tracks.is_empty() {
-            ui.set_track_title("Nothing playing".into());
-            ui.set_track_detail(format!("No music found in {}", dir.display()).into());
-            self.show_state(ui);
-            return;
-        }
-        let first = start
-            .and_then(|s| self.tracks.iter().position(|t| t == s))
-            .unwrap_or(0);
-        self.play_at(ui, first);
+        ui.set_selected(selected.map_or(-1, |r| r as i32));
+        ui.set_summary(rows::summary(&self.lib).into());
+        self.queue_next(); // the track after the playing one may have changed
     }
 
     /// Plays the track at `i`, skipping any that can't be opened.
     fn play_at(&mut self, ui: &AppWindow, i: usize) {
-        for j in i..self.tracks.len() {
-            if self.engine.play(&self.tracks[j]) {
+        for j in i..self.lib.tracks.len() {
+            if self.engine.play(Path::new(&self.lib.tracks[j].path)) {
                 self.set_index(ui, Some(j));
                 self.queue_next();
                 return;
@@ -69,30 +101,40 @@ impl Player {
         }
         self.engine.stop();
         self.set_index(ui, None);
-        ui.set_track_detail("Melora can't play the rest of this folder".into());
+        ui.set_track_detail("Melora can't play the rest of the list".into());
     }
 
     /// Lines up the following track so it starts without a gap. One that can't be opened is
     /// left out; the track after it is tried when this one ends.
     fn queue_next(&mut self) {
-        let next = self.index.and_then(|i| self.tracks.get(i + 1));
-        self.engine.set_next(next.map(PathBuf::as_path));
+        if !self.engine.is_loaded() {
+            return;
+        }
+        let next = self.index.and_then(|i| self.lib.tracks.get(i + 1));
+        self.engine.set_next(next.map(|t| Path::new(&t.path)));
+    }
+
+    fn mark(&self, track: usize, playing: bool) {
+        if let Some(&r) = self.track_rows.get(track) {
+            self.model.set_row_data(r, to_row(&self.rows[r], playing));
+        }
     }
 
     fn set_index(&mut self, ui: &AppWindow, index: Option<usize>) {
         if let Some(old) = self.index {
-            self.rows
-                .set_row_data(old, row_text(&self.tracks[old], false));
+            self.mark(old, false);
         }
         self.index = index;
         let Some(i) = index else {
             ui.set_track_title("Nothing playing".into());
+            ui.set_track_detail("".into());
             self.show_state(ui);
             return;
         };
-        self.rows.set_row_data(i, row_text(&self.tracks[i], true));
-        ui.set_selected(i as i32);
-        ui.set_track_title(stem(&self.tracks[i]).into());
+        self.mark(i, true);
+        let t = &self.lib.tracks[i];
+        let album = &self.lib.albums[t.album];
+        ui.set_track_title(t.title.as_str().into());
         let format = self.engine.format().map(|(codec, freq, chans)| {
             let layout = match chans {
                 1 => "mono".to_string(),
@@ -100,16 +142,16 @@ impl Player {
                 n => format!("{n} channels"),
             };
             format!(
-                "{codec}  ·  {:.1} kHz  ·  {layout}  ·  ",
+                "  ·  {codec}  ·  {:.1} kHz  ·  {layout}",
                 f64::from(freq) / 1000.0
             )
         });
         ui.set_track_detail(
             format!(
-                "{}{} of {}",
-                format.unwrap_or_default(),
-                i + 1,
-                self.tracks.len()
+                "{}  ·  {}{}",
+                t.artist,
+                album.title,
+                format.unwrap_or_default()
             )
             .into(),
         );
@@ -130,7 +172,7 @@ impl Player {
             pos
         };
         let time = if self.engine.is_loaded() {
-            format!("{} / {}", clock(pos), clock(len))
+            format!("{} / {}", rows::clock(pos), rows::clock(len))
         } else {
             String::new()
         };
@@ -145,8 +187,11 @@ impl Player {
             self.queue_next();
         } else if self.engine.has_ended() {
             // The last track, or the next one couldn't be opened: try what's after it.
-            let after = self.index.map(|i| i + 1).filter(|&i| i < self.tracks.len());
-            match after {
+            match self
+                .index
+                .map(|i| i + 1)
+                .filter(|&i| i < self.lib.tracks.len())
+            {
                 Some(i) => self.play_at(ui, i),
                 None => {
                     self.engine.stop();
@@ -162,15 +207,21 @@ impl Player {
             self.engine.pause();
         } else if self.engine.is_loaded() {
             self.engine.resume();
-        } else if !self.tracks.is_empty() {
-            let i = usize::try_from(ui.get_selected()).unwrap_or(0);
-            self.play_at(ui, i);
+        } else {
+            // Nothing loaded: play the selected track, or the first.
+            let from = usize::try_from(ui.get_selected())
+                .ok()
+                .and_then(|r| self.rows.get(r))
+                .and_then(|r| r.track);
+            if !self.lib.tracks.is_empty() {
+                self.play_at(ui, from.unwrap_or(0));
+            }
         }
         self.show_state(ui);
     }
 
     fn next(&mut self, ui: &AppWindow) {
-        if let Some(i) = self.index.filter(|i| i + 1 < self.tracks.len()) {
+        if let Some(i) = self.index.filter(|i| i + 1 < self.lib.tracks.len()) {
             self.play_at(ui, i + 1);
         }
     }
@@ -184,65 +235,102 @@ impl Player {
         }
     }
 
-    fn row_clicked(&mut self, ui: &AppWindow, row: i32) {
-        let now = Instant::now();
-        let double = self
-            .last_click
-            .is_some_and(|(r, at)| r == row && now - at < DOUBLE_CLICK);
-        self.last_click = if double { None } else { Some((row, now)) };
-        if let (true, Ok(i)) = (double, usize::try_from(row)) {
+    fn move_selection(&self, ui: &AppWindow, steps: i32) {
+        let from = usize::try_from(ui.get_selected()).ok();
+        if let Some(r) = rows::step(&self.rows, from, steps) {
+            ui.set_selected(r as i32);
+        }
+    }
+
+    fn activate(&mut self, ui: &AppWindow, row: i32) {
+        if let Some(i) = usize::try_from(row)
+            .ok()
+            .and_then(|r| self.rows.get(r))
+            .and_then(|r| r.track)
+        {
             self.play_at(ui, i);
         }
     }
 }
 
-fn stem(path: &Path) -> String {
-    path.file_stem()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default()
+/// Runs library scans on a worker thread, one at a time; a scan asked for while one runs
+/// happens straight after it. The result waits in `ready` for the UI thread.
+#[derive(Default)]
+struct Scanner {
+    busy: AtomicBool,
+    again: AtomicBool,
+    ready: Mutex<Option<Result<Library, String>>>,
 }
 
-fn row_text(path: &Path, playing: bool) -> StandardListViewItem {
-    let name = stem(path);
-    StandardListViewItem::from(
-        if playing {
-            format!("▶  {name}")
-        } else {
-            name
-        }
-        .as_str(),
-    )
+fn scan_once(db_file: &Path, base: &str) -> Result<Library, String> {
+    let mut db = Db::open(db_file, base).map_err(|e| e.to_string())?;
+    let mixes = db.folders(Kind::Mixes).map_err(|e| e.to_string())?;
+    library::scan(&mut db, Kind::Music, &mixes, base).map_err(|e| e.to_string())?;
+    let rows = db.tracks(Kind::Music).map_err(|e| e.to_string())?;
+    Ok(library::load(&rows, Kind::Music, &[], base))
 }
 
-/// 3:07, or 1:02:45 past an hour.
-fn clock(seconds: f64) -> String {
-    let t = seconds.max(0.0) as u64;
-    let (h, m, s) = (t / 3600, t / 60 % 60, t % 60);
-    if h > 0 {
-        format!("{h}:{m:02}:{s:02}")
-    } else {
-        format!("{m}:{s:02}")
+fn start_scan(scanner: &Arc<Scanner>, ui: &AppWindow, db_file: PathBuf, base: String) {
+    if scanner.busy.swap(true, Ordering::SeqCst) {
+        scanner.again.store(true, Ordering::SeqCst);
+        return;
     }
+    ui.set_summary("Scanning…".into());
+    let (scanner, weak) = (scanner.clone(), ui.as_weak());
+    std::thread::spawn(move || {
+        loop {
+            let result = scan_once(&db_file, &base);
+            *scanner.ready.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
+            let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_library_ready());
+            scanner.busy.store(false, Ordering::SeqCst);
+            // Go again only if asked meanwhile, and nobody else has started one since.
+            if !scanner.again.swap(false, Ordering::SeqCst)
+                || scanner.busy.swap(true, Ordering::SeqCst)
+            {
+                break;
+            }
+        }
+    });
 }
 
 fn main() -> Result<(), slint::PlatformError> {
-    let dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(Path::to_path_buf))
-        .unwrap_or_default();
+    let base = paths::base_dir().to_string_lossy().into_owned();
+    let db_file = paths::data_dir().join("melora.db");
     let ui = AppWindow::new()?;
-    let rows = Rc::new(VecModel::default());
-    ui.set_tracks(rows.clone().into());
+    let model = Rc::new(VecModel::default());
+    ui.set_rows(model.clone().into());
+
     let player = Rc::new(RefCell::new(Player {
         engine: Engine::new(),
-        tracks: Vec::new(),
-        rows,
+        lib: Library::default(),
+        rows: Vec::new(),
+        model,
+        track_rows: Vec::new(),
         index: None,
-        last_click: None,
     }));
 
-    if let Err(e) = bass::init(-1, &dir) {
+    if let Err(e) = bass::init(-1, &paths::base_dir()) {
         ui.set_track_detail(format!("Sound couldn't start: {e}").into());
+    }
+
+    // What's already in the database shows at once; the scan then catches up with the disk.
+    let db = match Db::open(&db_file, &base) {
+        Ok(db) => {
+            if let Ok(rows) = db.tracks(Kind::Music) {
+                player
+                    .borrow_mut()
+                    .set_library(&ui, library::load(&rows, Kind::Music, &[], &base));
+            }
+            Some(db)
+        }
+        Err(e) => {
+            ui.set_summary(format!("Couldn't open the library ({e})").into());
+            None
+        }
+    };
+    let scanner = Arc::new(Scanner::default());
+    if db.is_some() {
+        start_scan(&scanner, &ui, db_file.clone(), base.clone());
     }
 
     // Wires a UI callback to the player, with the window passed in.
@@ -258,12 +346,6 @@ fn main() -> Result<(), slint::PlatformError> {
         }};
     }
 
-    on!(
-        on_open_folder,
-        |p, ui| if let Some(dir) = rfd::FileDialog::new().pick_folder() {
-            p.load_folder(&ui, &dir, None)
-        }
-    );
     on!(on_toggle_play, |p, ui| p.toggle_play(&ui));
     on!(on_next, |p, ui| p.next(&ui));
     on!(on_previous, |p, ui| p.previous(&ui));
@@ -271,13 +353,35 @@ fn main() -> Result<(), slint::PlatformError> {
         p.engine.seek(seconds.into());
         p.show_state(&ui)
     });
-    on!(
-        on_play_index,
-        |p, ui, row| if let Ok(i) = usize::try_from(row) {
-            p.play_at(&ui, i)
+    on!(on_activate, |p, ui, row| p.activate(&ui, row));
+    on!(on_move_selection, |p, ui, steps| p
+        .move_selection(&ui, steps));
+
+    let s = scanner.clone();
+    on!(on_library_ready, |p, ui| {
+        match s.ready.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            Some(Ok(lib)) => p.set_library(&ui, lib),
+            Some(Err(e)) => ui.set_summary(format!("Couldn't scan the library ({e})").into()),
+            None => {}
         }
-    );
-    on!(on_row_clicked, |p, ui, row| p.row_clicked(&ui, row));
+    });
+
+    let (weak, s, file, b) = (ui.as_weak(), scanner.clone(), db_file.clone(), base.clone());
+    ui.on_add_folder(move || {
+        let (Some(ui), Some(db)) = (weak.upgrade(), db.as_ref()) else {
+            return;
+        };
+        let Some(dir) = rfd::FileDialog::new()
+            .set_title("Add a music folder")
+            .pick_folder()
+        else {
+            return;
+        };
+        match db.add_folder(Kind::Music, &dir.to_string_lossy()) {
+            Ok(()) => start_scan(&s, &ui, file.clone(), b.clone()),
+            Err(e) => ui.set_summary(format!("Couldn't add the folder ({e})").into()),
+        }
+    });
 
     // Short enough that a pause lands right after its 150 ms fade.
     let ticker = Timer::default();
@@ -288,19 +392,6 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });
 
-    // A folder, or a file (its folder loads and it plays first), can be passed on the command line.
-    if let Some(arg) = std::env::args_os().nth(1).map(PathBuf::from) {
-        let (dir, start) = if arg.is_dir() {
-            (arg, None)
-        } else {
-            (
-                arg.parent().map(Path::to_path_buf).unwrap_or_default(),
-                Some(arg),
-            )
-        };
-        player.borrow_mut().load_folder(&ui, &dir, start.as_deref());
-    }
-
     ui.show()?;
     // The native window exists once the event loop has started.
     let weak = ui.as_weak();
@@ -310,14 +401,4 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });
     slint::run_event_loop()
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn clock_formats() {
-        assert_eq!(super::clock(0.0), "0:00");
-        assert_eq!(super::clock(187.9), "3:07");
-        assert_eq!(super::clock(3765.0), "1:02:45");
-    }
 }

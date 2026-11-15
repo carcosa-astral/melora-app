@@ -1,0 +1,172 @@
+// The library list: album (or DJ) headings, disc headings and tracks, at fixed heights that the
+// Rust side (rows.rs) also uses to work out where each row sits, so it can scroll to any row.
+import { ListView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// kind: 0 album heading, 1 disc heading, 2 track.
+export struct Row {
+    kind: int,
+    title: string,
+    subtitle: string,
+    number: string,
+    length: string,
+    y: length,
+    height: length,
+    playing: bool,
+}
+
+component RowView inherits Rectangle {
+    in property <Row> item;
+    in property <bool> selected;
+    in property <int> index;
+    in property <int> count;
+    callback clicked();
+    callback double-clicked();
+
+    height: item.height;
+    background: selected ? Theme.panel : transparent;
+    accessible-role: list-item;
+    accessible-label: item.kind == 0 ? "Album: " + item.title + ", " + item.subtitle
+        : item.kind == 1 ? item.title
+        : item.title + (item.subtitle == "" ? "" : ", " + item.subtitle) + ", " + item.length + (item.playing ? ", playing" : "");
+    accessible-item-selectable: item.kind == 2;
+    accessible-item-selected: selected;
+    accessible-item-index: index;
+    accessible-item-count: count;
+
+    TouchArea {
+        clicked => { root.clicked(); }
+        double-clicked => { root.double-clicked(); }
+    }
+
+    if item.kind == 0: HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 14px;
+        padding-bottom: 6px;
+        spacing: 12px;
+        // Covers come later in phase 2; a plain square holds their place.
+        Rectangle {
+            width: 52px;
+            height: 52px;
+            border-radius: 4px;
+            background: Theme.panel;
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: item.title;
+                font-size: 15px;
+                font-weight: 600;
+                color: Theme.text;
+                overflow: elide;
+            }
+            Text {
+                text: item.subtitle;
+                color: Theme.dim;
+                overflow: elide;
+            }
+        }
+    }
+
+    if item.kind == 1: HorizontalLayout {
+        padding-left: 80px;
+        padding-top: 8px;
+        Text {
+            text: item.title;
+            font-size: 12px;
+            font-weight: 600;
+            color: Theme.dim;
+            vertical-alignment: center;
+        }
+    }
+
+    if item.kind == 2: HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 20px;
+        spacing: 12px;
+        Text {
+            text: item.playing ? "▶" : item.number;
+            width: 52px;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+            color: item.playing ? Theme.accent : Theme.dim;
+        }
+        Text {
+            text: item.title;
+            color: item.playing ? Theme.accent : Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        Text {
+            text: item.subtitle;
+            color: Theme.dim;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 0.6;
+        }
+        Text {
+            text: item.length;
+            color: Theme.dim;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            min-width: 48px;
+        }
+    }
+}
+
+// Arrow keys, Page Up/Down and Home/End move the selection (`move-selection` with a step count;
+// the Rust side skips headings); Enter and double-click play.
+export component TrackList inherits FocusScope {
+    in property <[Row]> rows;
+    in-out property <int> selected: -1;
+    in property <string> label;
+    out property <bool> focused: self.has-focus;
+    callback move-selection(int);
+    callback activate(int);
+
+    // Scroll so the selected row is in view whenever it changes, from the keys or from Rust.
+    changed selected => {
+        if (selected < 0 || selected >= rows.length) { return; }
+        let top = rows[selected].y;
+        let bottom = top + rows[selected].height;
+        if (top < -list.content-y) {
+            list.content-y = -top;
+        } else if (bottom > -list.content-y + list.visible-height) {
+            list.content-y = list.visible-height - bottom;
+        }
+    }
+
+    key-pressed(e) => {
+        if (e.modifiers.control || e.modifiers.alt) { return reject; }
+        if (e.text == Key.DownArrow) { move-selection(1); return accept; }
+        if (e.text == Key.UpArrow) { move-selection(-1); return accept; }
+        if (e.text == Key.PageDown) { move-selection(12); return accept; }
+        if (e.text == Key.PageUp) { move-selection(-12); return accept; }
+        if (e.text == Key.Home) { move-selection(-1000000); return accept; }
+        if (e.text == Key.End) { move-selection(1000000); return accept; }
+        if (e.text == Key.Return && selected >= 0) { activate(selected); return accept; }
+        reject
+    }
+
+    list := ListView {
+        accessible-label: root.label;
+        accessible-delegate-focus: root.selected;
+        accessible-item-count: root.rows.length;
+        for row[i] in root.rows: RowView {
+            item: row;
+            index: i;
+            count: root.rows.length;
+            selected: i == root.selected;
+            clicked => {
+                root.focus();
+                if (row.kind == 2) { root.selected = i; }
+            }
+            double-clicked => {
+                if (row.kind == 2) { root.activate(i); }
+            }
+        }
+    }
+}

@@ -1,14 +1,6 @@
-//! The tracks in a folder, for phase 1 (the real library comes in phase 2).
+//! Finding files in a folder and its subfolders.
 
 use std::path::{Path, PathBuf};
-
-const AUDIO: [&str; 7] = ["mp3", "flac", "opus", "ogg", "m4a", "aac", "wav"];
-
-/// Every audio file in `dir` and its subfolders, sorted by path (A–Z, ignoring case), so albums
-/// play in track order when their files are numbered.
-pub fn audio_files(dir: &Path) -> Vec<PathBuf> {
-    files_with(dir, &AUDIO)
-}
 
 /// Every file in `dir` and its subfolders with one of these extensions, sorted the same way.
 pub fn files_with(dir: &Path, extensions: &[&str]) -> Vec<PathBuf> {
@@ -53,7 +45,7 @@ mod tests {
         ] {
             std::fs::write(f, b"").expect("file");
         }
-        let names: Vec<String> = super::audio_files(&dir)
+        let names: Vec<String> = super::files_with(&dir, &["mp3", "flac", "opus"])
             .iter()
             .map(|p| {
                 p.strip_prefix(&dir)

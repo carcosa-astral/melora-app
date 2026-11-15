@@ -1,167 +1,16 @@
-// Melora 3.0: a folder's tracks, played in order without gaps. Nord colours, IBM Plex Sans.
+// Melora 3.0: the music library, played without gaps. Nord colours, IBM Plex Sans.
 import "fonts/IBMPlexSans-Regular.ttf";
 import "fonts/IBMPlexSans-SemiBold.ttf";
-import { StandardListView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { IconButton, ThinSlider } from "controls.slint";
+import { Row, TrackList } from "track_list.slint";
 
-// Nord, deepened for contrast; solid colours only (no transparency, no Mica, no tint from covers).
-// Contrast on the background: text 13.7:1, dim 9.4:1, accent 7.9:1, error 5.1:1, ok 7.7:1.
-global Theme {
-    out property <color> background: #1F232A; // deep polar night
-    out property <color> panel: #2E3440;      // nord0: hover, raised areas
-    out property <color> divider: #3B4252;    // nord1
-    out property <color> track: #434C5E;      // nord2: empty part of a slider
-    out property <color> text: #ECEFF4;       // nord6
-    out property <color> dim: #C0C8D6;
-    out property <color> accent: #88C0D0;     // nord8, frost
-    out property <color> error: #D57780;      // nord11, lightened to stay readable
-    out property <color> ok: #A3BE8C;         // nord14
-}
-
-// 2.x's thin slider: clicking jumps to the spot, dragging follows the mouse, and the arrow keys
-// (small-step) and Page Up/Down (large-step) move it. `committed` fires on release and on each key.
-component ThinSlider {
-    in property <float> minimum: 0;
-    in property <float> maximum: 1;
-    in-out property <float> value;
-    in property <float> small-step: 1;
-    in property <float> large-step: 10;
-    in property <bool> enabled: true;
-    in property <string> label;
-    out property <bool> dragging: touch.pressed;
-    callback committed(float);
-
-    property <float> span: max(maximum - minimum, 0.0001);
-    property <float> fraction: clamp((value - minimum) / span, 0, 1);
-    // The track is inset by half the thumb, so it spans exactly the thumb's travel.
-    property <length> travel: self.width - 12px;
-
-    min-height: 20px;
-    min-width: 60px;
-    horizontal-stretch: 1;
-    opacity: enabled ? 1 : 0.4;
-    accessible-role: slider;
-    accessible-label: label;
-    accessible-value: round(value);
-    accessible-value-minimum: minimum;
-    accessible-value-maximum: maximum;
-    accessible-value-step: small-step;
-    accessible-action-increment => { step(small-step); }
-    accessible-action-decrement => { step(-small-step); }
-
-    function set-from(x: length) {
-        value = clamp(minimum + (x - 6px) / travel * span, minimum, maximum);
-    }
-    function step(by: float) {
-        if (!enabled) { return; }
-        value = clamp(value + by, minimum, maximum);
-        committed(value);
-    }
-
-    // The ring shows for keyboard focus only, as in 2.x, not after a click.
-    property <bool> ring;
-    Rectangle {
-        border-width: ring && focus.has-focus ? 2px : 0;
-        border-color: Theme.accent;
-        border-radius: 7px;
-    }
-    Rectangle {
-        x: 6px;
-        width: travel;
-        height: 4px;
-        border-radius: 2px;
-        background: Theme.track;
-    }
-    Rectangle {
-        x: 6px;
-        width: travel * fraction;
-        height: 4px;
-        border-radius: 2px;
-        background: Theme.accent;
-    }
-    Rectangle {
-        x: travel * fraction;
-        width: 12px;
-        height: 12px;
-        border-radius: 6px;
-        background: Theme.text;
-        opacity: enabled && (touch.has-hover || touch.pressed || focus.has-focus) ? 1 : 0;
-    }
-    // Under the TouchArea, so clicks reach the TouchArea (which then takes focus itself).
-    focus := FocusScope {
-        enabled: root.enabled;
-        focus-gained(reason) => {
-            ring = reason == FocusReason.tab-navigation;
-        }
-        key-pressed(e) => {
-            ring = true;
-            if (e.modifiers.control) { return reject; } // Ctrl+arrows skip tracks
-            if (e.text == Key.LeftArrow || e.text == Key.DownArrow) { step(-small-step); return accept; }
-            if (e.text == Key.RightArrow || e.text == Key.UpArrow) { step(small-step); return accept; }
-            if (e.text == Key.PageDown) { step(-large-step); return accept; }
-            if (e.text == Key.PageUp) { step(large-step); return accept; }
-            if (e.text == Key.Home) { step(minimum - value); return accept; }
-            if (e.text == Key.End) { step(maximum - value); return accept; }
-            reject
-        }
-    }
-    touch := TouchArea {
-        enabled: root.enabled;
-        mouse-cursor: pointer;
-        pointer-event(e) => {
-            if (e.button != PointerEventButton.left) { return; }
-            if (e.kind == PointerEventKind.down) {
-                focus.focus();
-                set-from(self.mouse-x);
-            } else if (e.kind == PointerEventKind.up) {
-                committed(value);
-            }
-        }
-        moved => {
-            if (self.pressed) { set-from(self.mouse-x); }
-        }
-    }
-}
-
-component IconButton inherits Rectangle {
-    in property <string> glyph;
-    in property <string> label;
-    in property <length> size: 40px;
-    in property <bool> enabled: true;
-    callback clicked();
-    width: size;
-    height: size;
-    border-radius: size / 2;
-    background: touch.has-hover && enabled ? Theme.panel : transparent;
-    border-width: focus.has-focus ? 2px : 0;
-    border-color: Theme.accent;
-    opacity: enabled ? 1 : 0.4;
-    accessible-role: button;
-    accessible-label: label;
-    accessible-action-default => { if (enabled) { clicked(); } }
-    focus := FocusScope {
-        enabled: root.enabled;
-        key-pressed(e) => {
-            if (e.text == Key.Return) { clicked(); return accept; }
-            reject
-        }
-    }
-    touch := TouchArea {
-        enabled: root.enabled;
-        mouse-cursor: pointer;
-        clicked => { clicked(); }
-    }
-    Text {
-        text: glyph;
-        font-family: "Segoe Fluent Icons";
-        font-size: size * 0.45;
-        color: Theme.text;
-    }
-}
+export { Row }
 
 export component AppWindow inherits Window {
     title: "Melora";
-    preferred-width: 720px;
-    preferred-height: 560px;
+    preferred-width: 820px;
+    preferred-height: 640px;
     min-width: 420px;
     min-height: 320px;
     background: Theme.background;
@@ -169,24 +18,28 @@ export component AppWindow inherits Window {
     default-font-size: 13px;
 
     in property <string> track-title: "Nothing playing";
-    in property <string> track-detail: "Open a folder to start";
+    in property <string> track-detail;
     in property <bool> playing;
     in property <bool> loaded;
     in property <float> length;
     in-out property <float> position;
     in property <string> time-text;
-    in property <[StandardListViewItem]> tracks;
+    in property <[Row]> rows;
     in-out property <int> selected: -1;
+    // "1,234 tracks · 3d 4h", or what a scan is doing.
+    in property <string> summary;
     // While the seek bar is being dragged, playback mustn't move it back.
     out property <bool> seeking: seek-bar.dragging;
 
-    callback open-folder();
+    callback add-folder();
     callback toggle-play();
     callback previous();
     callback next();
     callback seek(float);
-    callback play-index(int);
-    callback row-clicked(int);
+    callback activate(int);
+    callback move-selection(int);
+    // A background scan has a new library waiting.
+    callback library-ready();
 
     forward-focus: list;
 
@@ -196,7 +49,6 @@ export component AppWindow inherits Window {
             if (e.text == " ") { toggle-play(); return accept; }
             if (e.modifiers.control && e.text == Key.LeftArrow) { previous(); return accept; }
             if (e.modifiers.control && e.text == Key.RightArrow) { next(); return accept; }
-            if (e.text == Key.Return && selected >= 0) { play-index(selected); return accept; }
             reject
         }
 
@@ -224,11 +76,6 @@ export component AppWindow inherits Window {
                 padding-right: 20px;
                 padding-bottom: 12px;
                 spacing: 4px;
-                IconButton {
-                    glyph: "\u{E8B7}";
-                    label: "Open folder";
-                    clicked => { open-folder(); }
-                }
                 IconButton {
                     glyph: "\u{E892}";
                     label: "Previous";
@@ -270,15 +117,64 @@ export component AppWindow inherits Window {
                 background: Theme.divider;
             }
 
-            list := StandardListView {
-                model: tracks;
-                current-item <=> selected;
-                accessible-label: "Tracks";
-                item-pointer-event(index, event, pos) => {
-                    if (event.kind == PointerEventKind.up && event.button == PointerEventButton.left) {
-                        row-clicked(index);
-                    }
+            HorizontalLayout {
+                padding-left: 20px;
+                padding-right: 14px;
+                padding-top: 8px;
+                padding-bottom: 8px;
+                spacing: 12px;
+                Text {
+                    text: "Music";
+                    font-size: 15px;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
                 }
+                Text {
+                    text: summary;
+                    color: Theme.dim;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+                IconButton {
+                    glyph: "\u{E8F4}";
+                    label: "Add music folder";
+                    size: 36px;
+                    clicked => { add-folder(); }
+                }
+            }
+
+            Rectangle {
+                height: 1px;
+                background: Theme.divider;
+            }
+
+            if rows.length == 0: VerticalLayout {
+                alignment: center;
+                spacing: 8px;
+                Text {
+                    text: "No music yet";
+                    font-size: 15px;
+                    font-weight: 600;
+                    color: Theme.text;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "Add a folder with the button at the top right.";
+                    color: Theme.dim;
+                    horizontal-alignment: center;
+                }
+            }
+
+            list := TrackList {
+                visible: rows.length > 0;
+                vertical-stretch: 1;
+                rows: rows;
+                selected <=> selected;
+                label: "Music";
+                move-selection(n) => { move-selection(n); }
+                activate(i) => { activate(i); }
             }
         }
     }

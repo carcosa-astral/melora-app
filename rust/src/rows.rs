@@ -1,0 +1,267 @@
+//! The library as list rows: a heading for each album (or DJ), a "Disc N" heading where an album
+//! has several discs, and its tracks. Kept apart from the UI so it can be tested without a window.
+
+use crate::library::Library;
+
+/// Row heights in pixels; the Slint list draws each kind at exactly this height.
+pub const ALBUM_HEIGHT: f32 = 72.0;
+pub const DISC_HEIGHT: f32 = 30.0;
+pub const TRACK_HEIGHT: f32 = 32.0;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowKind {
+    Album,
+    Disc,
+    Track,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ListRow {
+    pub kind: RowKind,
+    pub title: String,
+    /// Album: "Artist · Year". Track: its artist when it differs from the album's.
+    pub subtitle: String,
+    /// Track number ("01"), or empty.
+    pub number: String,
+    pub length: String,
+    /// For track rows: the index into `Library::tracks`.
+    pub track: Option<usize>,
+    /// Top of the row within the list, in pixels.
+    pub y: f32,
+    pub height: f32,
+}
+
+/// 3:07, or 1:02:45 past an hour.
+pub fn clock(seconds: f64) -> String {
+    let t = seconds.max(0.0) as u64;
+    let (h, m, s) = (t / 3600, t / 60 % 60, t % 60);
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    } else {
+        format!("{m}:{s:02}")
+    }
+}
+
+/// "1,234 tracks  ·  3d 4h" (or "2h 5m", "45m"); empty for an empty library.
+pub fn summary(lib: &Library) -> String {
+    let n = lib.tracks.len();
+    if n == 0 {
+        return String::new();
+    }
+    let digits = n.to_string();
+    let mut count = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            count.push(',');
+        }
+        count.push(c);
+    }
+    let noun = if n == 1 { "track" } else { "tracks" };
+    let mins = lib.tracks.iter().map(|t| t.duration_ms).sum::<i64>() / 60_000;
+    let (d, h, m) = (mins / 1440, mins / 60 % 24, mins % 60);
+    let total = if d > 0 {
+        format!("{d}d {h}h")
+    } else if mins >= 60 {
+        format!("{}h {m}m", mins / 60)
+    } else {
+        format!("{m}m")
+    };
+    format!("{count} {noun}  ·  {total}")
+}
+
+pub fn build(lib: &Library) -> Vec<ListRow> {
+    let mut rows = Vec::new();
+    let mut y = 0.0;
+    let mut push = |rows: &mut Vec<ListRow>, mut row: ListRow| {
+        row.height = match row.kind {
+            RowKind::Album => ALBUM_HEIGHT,
+            RowKind::Disc => DISC_HEIGHT,
+            RowKind::Track => TRACK_HEIGHT,
+        };
+        row.y = y;
+        y += row.height;
+        rows.push(row);
+    };
+    let (mut album, mut disc) = (None, String::new());
+    for (i, t) in lib.tracks.iter().enumerate() {
+        let a = &lib.albums[t.album];
+        if album != Some(t.album) {
+            album = Some(t.album);
+            disc.clear();
+            let subtitle = if a.year > 0 {
+                format!("{}  ·  {}", a.artist, a.year)
+            } else {
+                a.artist.clone()
+            };
+            push(
+                &mut rows,
+                ListRow {
+                    kind: RowKind::Album,
+                    title: a.title.clone(),
+                    subtitle,
+                    ..blank()
+                },
+            );
+        }
+        if !t.disc.is_empty() && t.disc != disc {
+            disc = t.disc.clone();
+            push(
+                &mut rows,
+                ListRow {
+                    kind: RowKind::Disc,
+                    title: disc.clone(),
+                    ..blank()
+                },
+            );
+        }
+        push(
+            &mut rows,
+            ListRow {
+                kind: RowKind::Track,
+                title: t.title.clone(),
+                subtitle: if t.artist.eq_ignore_ascii_case(&a.artist) {
+                    String::new()
+                } else {
+                    t.artist.clone()
+                },
+                number: if t.track_no > 0 {
+                    format!("{:02}", t.track_no)
+                } else {
+                    String::new()
+                },
+                length: if t.duration_ms > 0 {
+                    clock(t.duration_ms as f64 / 1000.0)
+                } else {
+                    String::new()
+                },
+                track: Some(i),
+                ..blank()
+            },
+        );
+    }
+    rows
+}
+
+fn blank() -> ListRow {
+    ListRow {
+        kind: RowKind::Track,
+        title: String::new(),
+        subtitle: String::new(),
+        number: String::new(),
+        length: String::new(),
+        track: None,
+        y: 0.0,
+        height: 0.0,
+    }
+}
+
+/// The track row `steps` track rows away from `from` (negative: up), stopping at the first and
+/// last tracks. Headings are skipped. None when the list has no tracks.
+pub fn step(rows: &[ListRow], from: Option<usize>, steps: i32) -> Option<usize> {
+    let tracks: Vec<usize> = (0..rows.len())
+        .filter(|&i| rows[i].track.is_some())
+        .collect();
+    let last = tracks.len().checked_sub(1)?;
+    // Where we are, counted in tracks. From a heading, the track below it is one step down and
+    // the track above it one step up.
+    let here = match from.map(|f| (f, tracks.iter().position(|&i| i >= f))) {
+        None => -1,
+        Some((_, None)) => tracks.len() as i32,
+        Some((f, Some(p))) if tracks[p] == f || steps < 0 => p as i32,
+        Some((_, Some(p))) => p as i32 - 1,
+    };
+    let to = (here + steps).clamp(0, last as i32) as usize;
+    Some(tracks[to])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::{Kind, TrackRow};
+    use crate::library::load;
+
+    fn lib() -> Library {
+        let row =
+            |path: &str, title: &str, album: &str, disc: i32, track: i32, artist: &str| TrackRow {
+                stored_path: path.into(),
+                title: Some(title.into()),
+                artist: Some(artist.into()),
+                album: Some(album.into()),
+                album_artist: Some("Ana".into()),
+                year: 2001,
+                disc_no: disc,
+                track_no: track,
+                duration_ms: 187_000,
+                ..TrackRow::default()
+            };
+        load(
+            &[
+                row(r"D:\M\A\1.flac", "One", "Alpha", 1, 1, "Ana"),
+                row(r"D:\M\A\2.flac", "Two", "Alpha", 2, 1, "Ana feat. Ben"),
+                row(r"D:\M\B\1.flac", "Solo", "Beta", 0, 3, "Ana"),
+            ],
+            Kind::Music,
+            &[],
+            r"C:\Melora",
+        )
+    }
+
+    #[test]
+    fn headings_come_before_each_album_and_disc() {
+        let rows = build(&lib());
+        let shape: Vec<(RowKind, &str)> = rows.iter().map(|r| (r.kind, r.title.as_str())).collect();
+        assert_eq!(
+            shape,
+            [
+                (RowKind::Album, "Alpha"),
+                (RowKind::Disc, "Disc 1"),
+                (RowKind::Track, "One"),
+                (RowKind::Disc, "Disc 2"),
+                (RowKind::Track, "Two"),
+                (RowKind::Album, "Beta"),
+                (RowKind::Track, "Solo"),
+            ]
+        );
+        assert_eq!(rows[0].subtitle, "Ana  ·  2001");
+        assert_eq!(rows[2].subtitle, ""); // same artist as the album
+        assert_eq!(rows[4].subtitle, "Ana feat. Ben");
+        assert_eq!(
+            (rows[6].number.as_str(), rows[6].length.as_str()),
+            ("03", "3:07")
+        );
+        assert_eq!(rows[2].y, ALBUM_HEIGHT + DISC_HEIGHT);
+    }
+
+    #[test]
+    fn stepping_skips_headings_and_stops_at_the_ends() {
+        let rows = build(&lib()); // tracks at rows 2, 4 and 6
+        assert_eq!(step(&rows, None, 1), Some(2));
+        assert_eq!(step(&rows, Some(2), 1), Some(4));
+        assert_eq!(step(&rows, Some(4), 1), Some(6));
+        assert_eq!(step(&rows, Some(6), 1), Some(6));
+        assert_eq!(step(&rows, Some(6), -1), Some(4));
+        assert_eq!(step(&rows, Some(2), -5), Some(2));
+        assert_eq!(step(&rows, Some(2), 10), Some(6));
+        assert_eq!(step(&rows, Some(5), 1), Some(6)); // from a heading
+        assert_eq!(step(&[], None, 1), None);
+    }
+
+    #[test]
+    fn summary_counts_and_totals() {
+        let mut l = lib();
+        assert_eq!(summary(&l), "3 tracks  ·  9m");
+        l.tracks.truncate(1);
+        assert_eq!(summary(&l), "1 track  ·  3m");
+        let t = l.tracks[0].clone();
+        l.tracks = vec![t; 1234];
+        assert_eq!(summary(&l), "1,234 tracks  ·  2d 16h");
+        assert_eq!(summary(&Library::default()), "");
+    }
+
+    #[test]
+    fn clock_formats() {
+        assert_eq!(clock(0.0), "0:00");
+        assert_eq!(clock(187.9), "3:07");
+        assert_eq!(clock(3765.0), "1:02:45");
+    }
+}
