@@ -16,7 +16,13 @@ fn main() {
         println!("cargo:warning=couldn't find the {profile} folder above {out}");
         return;
     };
-    for dll in ["bass.dll", "bassflac.dll", "bassopus.dll", "bass_aac.dll"] {
+    for dll in [
+        "bass.dll",
+        "bassmix.dll",
+        "bassflac.dll",
+        "bassopus.dll",
+        "bass_aac.dll",
+    ] {
         let from = Path::new("../lib/bass").join(dll);
         println!("cargo:rerun-if-changed={}", from.display());
         if let Err(e) = std::fs::copy(&from, exe_dir.join(dll)) {

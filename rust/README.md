@@ -5,15 +5,25 @@ everything 2.x does. The plan and phases are in the main [README](../README.md#r
 
 ## Where it is
 
-Phase 1 proof: a window that plays one file through BASS, with play/pause fades (150 ms, as in
-2.x), a seek bar, and Melora's colours and IBM Plex Sans. Open a file with the button, or pass its
-path: `melora.exe "D:\Music\song.flac"`. Space plays and pauses.
+Phase 1, in progress. Open a folder (or pass one, or a file in it: `melora.exe "D:\Music\Album"`)
+and its tracks, subfolders included, play in order A–Z without gaps, using the 2.x engine ported to
+Rust: one output stream fed from each track's decoder, with BASSmix converting a track in another
+sample rate or channel layout. Previous, Play/Pause (150 ms fades), Next and a seek bar. Double-click
+or Enter plays a row, Space plays and pauses, Ctrl+Left/Right skip. Tracks that can't be opened are
+skipped.
 
-Measured on the proof (release build, software renderer): 8.9 MB for the exe and BASS DLLs, about
-21 MB of memory, window up in well under a second.
+The engine tests from 2.x are ported and run on BASS's silent device (`cargo test`): the hand-over,
+seeking near the end, other sample rates and mono, the end of the last track, and the fades.
 
-Not working yet: Mica. The window shows the solid fallback colour instead; the software renderer
-draws an opaque window, so the backdrop needs another approach (phase 1).
+Measured (release build, software renderer): 8.9 MB for the exe and BASS DLLs, about 21 MB of
+memory, window up in well under a second.
+
+Still to do in phase 1:
+- Clicking the seek bar moves it one step instead of jumping there (Slint's standard slider). A
+  slider of our own fixes this and the keyboard steps from 2.x.
+- Mica: the window shows the solid fallback colour. The software renderer draws an opaque window;
+  Slint's OpenGL renderer could be transparent but used about 50 MB more memory here.
+- Listening to a gapless join on real music in the app (only the tests check it so far).
 
 ## Building
 
@@ -31,8 +41,10 @@ cargo build --release
 | File | Job |
 |---|---|
 | `src/main.rs` | Starts things and wires the window to playback |
-| `src/bass.rs` | Our own small bindings to bass.dll (only the calls Melora uses) |
-| `src/backdrop.rs` | Dark title bar and Mica on Windows 11 |
+| `src/bass.rs` | Our own small bindings to BASS and BASSmix (only the calls Melora uses) |
+| `src/engine.rs` | Gapless playback and fades, ported from 2.x's AudioEngine, with its tests |
+| `src/folder.rs` | The audio files in a folder, sorted |
+| `src/backdrop.rs` | Dark title bar on Windows |
 | `ui/app.slint` | The window |
 | `build.rs` | Compiles the UI, copies the BASS DLLs |
 
@@ -43,8 +55,8 @@ Approved by Griff on 2026-11-15 for the 3.0 rewrite, when the no-crates rule was
 | Crate | Why |
 |---|---|
 | `slint` | The window and widgets. Built with only its software renderer (about 50 MB less memory than OpenGL here, same look) |
-| `rfd` | The Windows file picker |
-| `raw-window-handle` | To reach the native window for Mica |
+| `rfd` | The Windows folder picker |
+| `raw-window-handle` | To reach the native window (dark title bar) |
 | `slint-build` | Compiles `ui/*.slint` at build time |
 | BASS (DLLs, not a crate) | All playback, as in 2.x |
 

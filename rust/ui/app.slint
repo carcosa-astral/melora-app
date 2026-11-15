@@ -1,127 +1,171 @@
-// Melora 3.0 proof: one track, play and pause with fades, seek. Colours and fonts match Melora 2.x.
+// Melora 3.0, phase 1: a folder's tracks, played in order without gaps. Colours and fonts match 2.x.
 import "fonts/IBMPlexSans-Regular.ttf";
 import "fonts/IBMPlexSans-SemiBold.ttf";
-import { Slider } from "std-widgets.slint";
+import { Slider, StandardListView } from "std-widgets.slint";
 
 global Theme {
-    out property <color> fallback: #17171A;
-    out property <color> bar: #FFFFFF0C;
+    out property <color> background: #17171A;
     out property <color> text: #ECECEF;
     out property <color> dim: #8E8E96;
     out property <color> accent: #9BB0FF;
     out property <color> hover: #FFFFFF0E;
+    out property <color> divider: #FFFFFF14;
 }
 
 component IconButton inherits Rectangle {
     in property <string> glyph;
     in property <string> label;
+    in property <length> size: 40px;
+    in property <bool> enabled: true;
     callback clicked();
-    width: 44px;
-    height: 44px;
-    border-radius: 22px;
-    background: touch.has-hover ? Theme.hover : transparent;
+    width: size;
+    height: size;
+    border-radius: size / 2;
+    background: touch.has-hover && enabled ? Theme.hover : transparent;
     border-width: focus.has-focus ? 2px : 0;
     border-color: Theme.accent;
+    opacity: enabled ? 1 : 0.4;
     accessible-role: button;
     accessible-label: label;
-    accessible-action-default => { clicked(); }
+    accessible-action-default => { if (enabled) { clicked(); } }
     focus := FocusScope {
+        enabled: root.enabled;
         key-pressed(e) => {
             if (e.text == Key.Return) { clicked(); return accept; }
             reject
         }
     }
     touch := TouchArea {
+        enabled: root.enabled;
         mouse-cursor: pointer;
         clicked => { clicked(); }
     }
     Text {
         text: glyph;
         font-family: "Segoe Fluent Icons";
-        font-size: 20px;
+        font-size: size * 0.45;
         color: Theme.text;
     }
 }
 
 export component AppWindow inherits Window {
     title: "Melora";
-    preferred-width: 560px;
-    preferred-height: 230px;
-    min-width: 380px;
-    min-height: 200px;
+    preferred-width: 720px;
+    preferred-height: 560px;
+    min-width: 420px;
+    min-height: 320px;
+    background: Theme.background;
     default-font-family: "IBM Plex Sans";
     default-font-size: 13px;
 
-    in property <bool> mica;
     in property <string> track-title: "Nothing playing";
-    in property <string> track-detail: "Open a file to start";
+    in property <string> track-detail: "Open a folder to start";
     in property <bool> playing;
     in property <bool> loaded;
     in property <float> length;
     in-out property <float> position;
     in property <string> time-text;
+    in property <[StandardListViewItem]> tracks;
+    in-out property <int> selected: -1;
 
-    callback open-file();
+    callback open-folder();
     callback toggle-play();
+    callback previous();
+    callback next();
     callback seek(float);
+    callback play-index(int);
+    callback row-clicked(int);
 
-    background: mica ? transparent : Theme.fallback;
+    forward-focus: list;
 
-    forward-focus: keys;
-    keys := FocusScope {
+    // Keys the focused control doesn't use itself end up here.
+    FocusScope {
         key-pressed(e) => {
             if (e.text == " ") { toggle-play(); return accept; }
+            if (e.modifiers.control && e.text == Key.LeftArrow) { previous(); return accept; }
+            if (e.modifiers.control && e.text == Key.RightArrow) { next(); return accept; }
+            if (e.text == Key.Return && selected >= 0) { play-index(selected); return accept; }
             reject
         }
-    }
 
-    VerticalLayout {
-        padding: 24px;
-        spacing: 6px;
-        alignment: start;
+        VerticalLayout {
+            VerticalLayout {
+                padding: 20px;
+                padding-bottom: 12px;
+                spacing: 4px;
+                Text {
+                    text: track-title;
+                    font-size: 20px;
+                    font-weight: 600;
+                    color: Theme.text;
+                    overflow: elide;
+                }
+                Text {
+                    text: track-detail;
+                    color: Theme.dim;
+                    overflow: elide;
+                }
+            }
 
-        Text {
-            text: track-title;
-            font-size: 20px;
-            font-weight: 600;
-            color: Theme.text;
-            overflow: elide;
-        }
-        Text {
-            text: track-detail;
-            color: Theme.dim;
-            overflow: elide;
-        }
-        Rectangle { height: 14px; }
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 20px;
+                padding-bottom: 12px;
+                spacing: 4px;
+                IconButton {
+                    glyph: "\u{E8B7}";
+                    label: "Open folder";
+                    clicked => { open-folder(); }
+                }
+                IconButton {
+                    glyph: "\u{E892}";
+                    label: "Previous";
+                    enabled: loaded;
+                    clicked => { previous(); }
+                }
+                IconButton {
+                    glyph: playing ? "\u{E769}" : "\u{E768}";
+                    label: playing ? "Pause" : "Play";
+                    size: 44px;
+                    clicked => { toggle-play(); }
+                }
+                IconButton {
+                    glyph: "\u{E893}";
+                    label: "Next";
+                    enabled: loaded;
+                    clicked => { next(); }
+                }
+                Slider {
+                    enabled: loaded;
+                    minimum: 0;
+                    maximum: max(length, 1);
+                    value <=> position;
+                    accessible-label: "Position";
+                    released(v) => { seek(v); }
+                }
+                Text {
+                    text: time-text;
+                    color: Theme.dim;
+                    vertical-alignment: center;
+                    horizontal-alignment: right;
+                    min-width: 96px;
+                }
+            }
 
-        HorizontalLayout {
-            spacing: 10px;
-            alignment: stretch;
-            IconButton {
-                glyph: "\u{E8E5}";
-                label: "Open file";
-                clicked => { open-file(); }
+            Rectangle {
+                height: 1px;
+                background: Theme.divider;
             }
-            IconButton {
-                glyph: playing ? "\u{E769}" : "\u{E768}";
-                label: playing ? "Pause" : "Play";
-                clicked => { toggle-play(); }
-            }
-            Slider {
-                enabled: loaded;
-                minimum: 0;
-                maximum: max(length, 1);
-                value <=> position;
-                accessible-label: "Position";
-                released(v) => { seek(v); }
-                vertical-stretch: 0;
-            }
-            Text {
-                text: time-text;
-                color: Theme.dim;
-                vertical-alignment: center;
-                min-width: 84px;
-                horizontal-alignment: right;
+
+            list := StandardListView {
+                model: tracks;
+                current-item <=> selected;
+                accessible-label: "Tracks";
+                item-pointer-event(index, event, pos) => {
+                    if (event.kind == PointerEventKind.up && event.button == PointerEventButton.left) {
+                        row-clicked(index);
+                    }
+                }
             }
         }
     }
