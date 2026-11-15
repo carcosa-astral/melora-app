@@ -241,9 +241,10 @@ impl Discord {
                             let why = reply["message"]
                                 .as_str()
                                 .unwrap_or("Discord closed the connection.");
-                            set_status(&format!(
-                                "Discord didn't accept that application ID ({why})."
-                            ));
+                            let line =
+                                format!("Discord didn't accept that application ID ({why}).");
+                            crate::log::write(&line);
+                            set_status(&line);
                             continue;
                         }
                         Err(_) => {

@@ -8,6 +8,7 @@ mod discord;
 mod engine;
 mod folder;
 mod library;
+mod log;
 mod logos;
 mod media;
 mod online;
@@ -140,6 +141,13 @@ fn show_folders(ui: &AppWindow, db: &Db) {
 }
 
 fn main() -> Result<(), slint::PlatformError> {
+    // Anything unexpected goes in the log before Melora closes, as 2.x does.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log::write(&format!("Unexpected error: {info}"));
+        default_hook(info);
+    }));
+
     let base = paths::base_dir().to_string_lossy().into_owned();
     let db_file = paths::data_dir().join("melora.db");
     let ui = AppWindow::new()?;
@@ -387,6 +395,8 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     });
 
+    ui.on_open_log(|| window::open_url(&log::ensure().to_string_lossy()));
+
     ui.on_quit(|| {
         let _ = slint::quit_event_loop();
     });
@@ -454,7 +464,10 @@ fn main() -> Result<(), slint::PlatformError> {
                     p.set_library(&ui, i, lib);
                 }
             }
-            Some(Err(e)) => ui.set_summary(format!("Couldn't scan the library ({e})").into()),
+            Some(Err(e)) => {
+                log::write(&format!("Library scan failed, library left as it was: {e}"));
+                ui.set_summary(format!("Couldn't scan the library ({e})").into())
+            }
             None => {}
         }
     });

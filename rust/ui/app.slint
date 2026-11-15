@@ -94,6 +94,7 @@ export component AppWindow inherits Window {
     callback add-folder(int);
     callback remove-folder(int, string);
     callback open-settings();
+    callback open-log();
     callback toggle-love();
     callback scrobble-mixes-changed(bool);
     callback lastfm-connect();
@@ -482,6 +483,7 @@ export component AppWindow inherits Window {
         minimize-to-tray-changed(on) => { minimize-to-tray-changed(on); }
         online-art-changed(on) => { online-art-changed(on); }
         done => { settings-open = false; }
+        open-log => { open-log(); }
     }
 
     if confirm-open: ConfirmPanel {

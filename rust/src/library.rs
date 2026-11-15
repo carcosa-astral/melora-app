@@ -323,8 +323,16 @@ fn read_tags(path: &Path, stored: String, mtime: i64) -> TrackRow {
         mtime,
         ..TrackRow::default()
     };
-    let Ok(file) = lofty::read_from_path(path) else {
-        return row;
+    let file = match lofty::read_from_path(path) {
+        Ok(f) => f,
+        Err(e) => {
+            // Unreadable tags: keep the file, named after itself.
+            crate::log::write(&format!(
+                "Couldn't read the tags of {}: {e}",
+                path.display()
+            ));
+            return row;
+        }
     };
     row.duration_ms = file.properties().duration().as_millis() as i64;
     let Some(tag) = file.primary_tag().or_else(|| file.first_tag()) else {
@@ -391,7 +399,9 @@ pub fn scan(
         if !Path::new(&root).is_dir() {
             // An unplugged drive or a share that's down: keep what was there rather than emptying
             // the library, and pick it up again when the folder comes back.
-            // shortcut: not logged yet, as 2.x does; the log arrives in phase 5.
+            crate::log::write(&format!(
+                "{kind:?} folder not found, keeping its tracks: {root}"
+            ));
             for (_, (stored, _)) in known
                 .iter()
                 .filter(|(_, (s, _))| is_under(&from_stored(s, base), &root))

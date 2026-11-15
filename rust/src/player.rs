@@ -21,7 +21,7 @@ use crate::rows::{self, ListRow, RowKind};
 use crate::scrobble::{self, Love, Scrobble};
 use crate::scrobbler::{self, Report, Scrobbler};
 use crate::tray::Tray;
-use crate::{AppWindow, Row, covers, library, logos, online, radio};
+use crate::{AppWindow, Row, covers, library, log, logos, online, radio};
 
 /// The Radio tab's place among the views.
 pub const RADIO: usize = 2;
@@ -261,18 +261,22 @@ impl Player {
         let mut track = self.queue.current();
         for _ in 0..self.views[which].lib.tracks.len() {
             let Some(t) = track else { break };
-            if self
-                .engine
-                .play(Path::new(&self.views[which].lib.tracks[t].path))
-            {
+            let path = &self.views[which].lib.tracks[t].path;
+            if self.engine.play(Path::new(path)) {
                 self.set_playing(ui, Some((which, t)));
                 self.queue_next();
                 return;
             }
+            log::write(&if Path::new(path).exists() {
+                format!("Skipped a file Melora can't play: {path}")
+            } else {
+                format!("Skipped a file that's missing: {path}")
+            });
             track = self.queue.next(true);
         }
         self.engine.stop();
         self.set_playing(ui, None);
+        log::write("Stopped: none of the rest of the list could be played");
         ui.set_now_playing("Melora can't play the rest of the list".into());
     }
 
@@ -1138,7 +1142,16 @@ impl Player {
                 self.tuned_in_at = online::now() * 1000;
                 self.station_now = self.engine.stream_title();
             }
-            Err(why) => self.station_now = Some(why),
+            Err(why) => {
+                if let Some((_, i)) = self.playing {
+                    let st = &self.stations[i];
+                    log::write(&format!(
+                        "Radio: couldn't tune in to {} ({why}): {}",
+                        st.name, st.url
+                    ));
+                }
+                self.station_now = Some(why);
+            }
         }
         self.after_station_change(ui);
     }
@@ -1148,6 +1161,9 @@ impl Player {
         self.engine.tick(); // finishes a fade-out
         if self.engine.has_ended() {
             self.engine.stop();
+            if let Some(st) = self.playing.and_then(|(_, i)| self.stations.get(i)) {
+                log::write(&format!("Radio: {} dropped the connection", st.name));
+            }
             self.station_now = Some("The stream stopped.".into());
             self.after_station_change(ui);
         } else if self.engine.is_live() {

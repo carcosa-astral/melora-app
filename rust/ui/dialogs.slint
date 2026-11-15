@@ -233,6 +233,7 @@ export component SettingsPanel inherits Rectangle {
     callback minimize-to-tray-changed(bool);
     callback online-art-changed(bool);
     callback done();
+    callback open-log();
 
     background: Theme.background;
     TouchArea { }
@@ -467,6 +468,19 @@ export component SettingsPanel inherits Rectangle {
                         Rectangle { height: 16px; }
                         Heading { text: "About"; }
                         Hint { text: version; }
+                        Rectangle { height: 6px; }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            Hint {
+                                text: "Things that went wrong without showing: skipped files, refused scrobbles, stations that dropped.";
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                            }
+                            Button {
+                                text: "Open log";
+                                clicked => { open-log(); }
+                            }
+                        }
                     }
                 }
             }

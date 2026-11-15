@@ -290,32 +290,77 @@ fn love(agent: &ureq::Agent, db: &Db, service: &str, love: &Love) -> Outcome {
     }
 }
 
+/// Services that couldn't be reached last time, so that's logged once rather than every 5 minutes.
+static UNREACHABLE: Mutex<Vec<&'static str>> = Mutex::new(Vec::new());
+
+/// Logs a service that can't be reached (once, until it can again) or that refused the login.
+/// False when sending to it should stop for now.
+fn report(service: &'static str, outcome: Outcome, what: &str) -> bool {
+    let mut unreachable = UNREACHABLE.lock().unwrap_or_else(|e| e.into_inner());
+    match outcome {
+        Outcome::RetryLater => {
+            if !unreachable.contains(&service) {
+                unreachable.push(service);
+                crate::log::write(&format!(
+                    "{service}: can't be reached; {what} kept to send later"
+                ));
+            }
+            false
+        }
+        Outcome::AuthFailed => {
+            crate::log::write(&format!(
+                "{service}: the saved login was refused; {what} kept until you reconnect in Settings"
+            ));
+            false
+        }
+        Outcome::Sent | Outcome::Rejected => {
+            if let Some(i) = unreachable.iter().position(|s| *s == service) {
+                unreachable.remove(i);
+                crate::log::write(&format!("{service}: reachable again"));
+            }
+            true
+        }
+    }
+}
+
 /// Sends everything queued, per service, oldest first. Stops for a service that can't be reached
 /// or whose login was refused (its plays wait); drops what's sent or refused for good.
 fn flush(agent: &ureq::Agent, db: &mut Db) {
-    // shortcut: what's refused for good isn't logged yet, as 2.x does; the log comes in phase 5.
     for service in connected(db) {
         while let Ok(batch) = db.scrobbles(service, BATCH) {
             if batch.is_empty() {
                 break;
             }
             let plays: Vec<Scrobble> = batch.iter().map(|(_, p)| p.clone()).collect();
-            match submit(agent, db, service, &plays) {
-                Outcome::Sent | Outcome::Rejected => {
-                    let ids: Vec<i64> = batch.iter().map(|(id, _)| *id).collect();
-                    if db.delete_scrobbles(&ids).is_err() {
-                        break;
-                    }
-                }
-                Outcome::RetryLater | Outcome::AuthFailed => break,
+            let outcome = submit(agent, db, service, &plays);
+            if !report(service, outcome, &format!("{} play(s)", plays.len())) {
+                break;
+            }
+            // Sent, or refused for good.
+            let ids: Vec<i64> = batch.iter().map(|(id, _)| *id).collect();
+            if db.delete_scrobbles(&ids).is_err() {
+                break;
+            }
+            if outcome == Outcome::Rejected {
+                let what: Vec<String> = plays
+                    .iter()
+                    .map(|p| format!("{} – {}", p.artist, p.title))
+                    .collect();
+                crate::log::write(&format!("{service}: refused {}", what.join("; ")));
             }
         }
         for l in db.pending_loves(service).unwrap_or_default() {
-            match love(agent, db, service, &l) {
-                Outcome::Sent | Outcome::Rejected => {
-                    let _ = db.clear_pending_love(service, &l.artist, &l.title);
-                }
-                Outcome::RetryLater | Outcome::AuthFailed => break,
+            let outcome = love(agent, db, service, &l);
+            if !report(service, outcome, "loves") {
+                break;
+            }
+            let _ = db.clear_pending_love(service, &l.artist, &l.title);
+            if outcome == Outcome::Rejected {
+                let verb = if l.loved { "love" } else { "un-love" };
+                crate::log::write(&format!(
+                    "{service}: couldn't {verb} {} – {} (not recognised)",
+                    l.artist, l.title
+                ));
             }
         }
     }
