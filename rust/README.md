@@ -5,23 +5,22 @@ everything 2.x does. The plan and phases are in the main [README](../README.md#r
 
 ## Where it is
 
-Phase 1, in progress. Open a folder (or pass one, or a file in it: `melora.exe "D:\Music\Album"`)
-and its tracks, subfolders included, play in order A–Z without gaps, using the 2.x engine ported to
-Rust: one output stream fed from each track's decoder, with BASSmix converting a track in another
-sample rate or channel layout. Previous, Play/Pause (150 ms fades), Next and a seek bar of our own like 2.x's (click to jump,
-drag, arrows 5 s, Page Up/Down 30 s, a focus ring only for keyboard focus). Double-click
-or Enter plays a row, Space plays and pauses, Ctrl+Left/Right skip. Tracks that can't be opened are
-skipped.
+Phase 1 is done: gapless playback with the 2.x engine ported to Rust (one output stream fed from
+each track's decoder, BASSmix for other sample rates and mono), 150 ms fades, and a seek bar of our
+own (click to jump, drag, arrows 5 s, Page Up/Down 30 s).
 
-The engine tests from 2.x are ported and run on BASS's silent device (`cargo test`): the hand-over,
-seeking near the end, other sample rates and mono, the end of the last track, and the fades.
+Phase 2, in progress:
+- Done: the library. Folders are scanned in the background into `data\melora.db` (2.x's tables,
+  2.x's path rules and timestamps), and the Music screen lists albums with their discs and tracks.
+  Add a folder with the button next to "Music". Arrow keys, Page Up/Down, Home/End, Enter and
+  double-click; Space plays and pauses, Ctrl+Left/Right skip.
+- Next: the Mixes screen, album covers and DJ pictures, folder watching, shuffle and repeat.
 
-Measured (release build, software renderer): 8.9 MB for the exe and BASS DLLs, about 21 MB of
-memory, window up in well under a second.
+The list draws only the rows on screen, at positions worked out in Rust, so it stays light however
+big the library is.
 
-Still to do in phase 1:
-- Listening closely to a join between two tracks that run into each other (the hand-over itself
-  is checked in the app and by the tests).
+Measured (release build): about 9 MB for the exe and BASS DLLs, about 26 MB of memory with
+149 tracks loaded, window up in well under a second.
 
 ## Building
 
@@ -41,12 +40,16 @@ cargo build --release
 | `src/main.rs` | Starts things and wires the window to playback |
 | `src/bass.rs` | Our own small bindings to BASS and BASSmix (only the calls Melora uses) |
 | `src/engine.rs` | Gapless playback and fades, ported from 2.x's AudioEngine, with its tests |
-| `src/folder.rs` | The audio files in a folder, sorted |
+| `src/folder.rs` | Files with given extensions in a folder and its subfolders |
 | `src/paths.rs` | Where data lives, and paths stored like 2.x (no drive letter on Melora's own drive) |
 | `src/db.rs` | `data\melora.db`, in exactly 2.x's tables |
 | `src/library.rs` | Scanning folders and grouping tracks into albums and DJs, with 2.x's rules |
+| `src/rows.rs` | The list's rows (headings and tracks), their positions, and keyboard steps |
 | `src/backdrop.rs` | Dark title bar on Windows |
 | `ui/app.slint` | The window |
+| `ui/track_list.slint` | The library list |
+| `ui/controls.slint` | Icon buttons and the seek bar |
+| `ui/theme.slint` | The Nord colours |
 | `build.rs` | Compiles the UI, copies the BASS DLLs |
 
 ## Approved dependencies

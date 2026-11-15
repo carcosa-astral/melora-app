@@ -24,8 +24,13 @@ export component AppWindow inherits Window {
     in property <float> length;
     in-out property <float> position;
     in property <string> time-text;
+    // The rows in view, and the whole list's size (see TrackList).
     in property <[Row]> rows;
+    in property <int> row-count;
+    in property <length> list-height;
     in-out property <int> selected: -1;
+    in-out property <length> list-scroll <=> list.scroll-y;
+    out property <length> list-view-height: list.view-height;
     // "1,234 tracks · 3d 4h", or what a scan is doing.
     in property <string> summary;
     // While the seek bar is being dragged, playback mustn't move it back.
@@ -40,6 +45,7 @@ export component AppWindow inherits Window {
     callback move-selection(int);
     // A background scan has a new library waiting.
     callback library-ready();
+    callback list-view-changed();
 
     forward-focus: list;
 
@@ -150,7 +156,7 @@ export component AppWindow inherits Window {
                 background: Theme.divider;
             }
 
-            if rows.length == 0: VerticalLayout {
+            if row-count == 0: VerticalLayout {
                 alignment: center;
                 spacing: 8px;
                 Text {
@@ -168,9 +174,12 @@ export component AppWindow inherits Window {
             }
 
             list := TrackList {
-                visible: rows.length > 0;
+                visible: row-count > 0;
                 vertical-stretch: 1;
                 rows: rows;
+                count: row-count;
+                total-height: list-height;
+                view-changed => { list-view-changed(); }
                 selected <=> selected;
                 label: "Music";
                 move-selection(n) => { move-selection(n); }

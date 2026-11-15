@@ -21,7 +21,7 @@ use db::{Db, Kind};
 use engine::Engine;
 use library::Library;
 use rows::ListRow;
-use slint::{ComponentHandle, Model, Timer, TimerMode, VecModel};
+use slint::{ComponentHandle, Timer, TimerMode, VecModel};
 
 slint::include_modules!();
 
@@ -30,6 +30,7 @@ struct Player {
     engine: Engine,
     lib: Library,
     rows: Vec<ListRow>,
+    /// Only the rows in view (see `refresh_view`).
     model: Rc<VecModel<Row>>,
     /// The list row of each track.
     track_rows: Vec<usize>,
@@ -37,8 +38,9 @@ struct Player {
     index: Option<usize>,
 }
 
-fn to_row(r: &ListRow, playing: bool) -> Row {
+fn to_row(r: &ListRow, index: usize, playing: bool) -> Row {
     Row {
+        index: index as i32,
         kind: match r.kind {
             rows::RowKind::Album => 0,
             rows::RowKind::Disc => 1,
@@ -79,13 +81,10 @@ impl Player {
         self.index = find(playing);
         let selected = find(selected).map(|i| self.track_rows[i]);
 
-        self.model.set_vec(
-            self.rows
-                .iter()
-                .map(|r| to_row(r, r.track.is_some() && r.track == self.index))
-                .collect::<Vec<_>>(),
-        );
+        ui.set_row_count(self.rows.len() as i32);
+        ui.set_list_height(self.rows.last().map_or(0.0, |r| r.y + r.height));
         ui.set_selected(selected.map_or(-1, |r| r as i32));
+        self.refresh_view(ui);
         ui.set_summary(rows::summary(&self.lib).into());
         self.queue_next(); // the track after the playing one may have changed
     }
@@ -114,24 +113,26 @@ impl Player {
         self.engine.set_next(next.map(|t| Path::new(&t.path)));
     }
 
-    fn mark(&self, track: usize, playing: bool) {
-        if let Some(&r) = self.track_rows.get(track) {
-            self.model.set_row_data(r, to_row(&self.rows[r], playing));
-        }
+    /// Hands the list the rows now in view, with the playing one marked.
+    fn refresh_view(&self, ui: &AppWindow) {
+        let range = rows::in_view(&self.rows, ui.get_list_scroll(), ui.get_list_view_height());
+        let playing = self.index.and_then(|i| self.track_rows.get(i).copied());
+        self.model.set_vec(
+            range
+                .map(|r| to_row(&self.rows[r], r, Some(r) == playing))
+                .collect::<Vec<_>>(),
+        );
     }
 
     fn set_index(&mut self, ui: &AppWindow, index: Option<usize>) {
-        if let Some(old) = self.index {
-            self.mark(old, false);
-        }
         self.index = index;
+        self.refresh_view(ui);
         let Some(i) = index else {
             ui.set_track_title("Nothing playing".into());
             ui.set_track_detail("".into());
             self.show_state(ui);
             return;
         };
-        self.mark(i, true);
         let t = &self.lib.tracks[i];
         let album = &self.lib.albums[t.album];
         ui.set_track_title(t.title.as_str().into());
@@ -239,6 +240,14 @@ impl Player {
         let from = usize::try_from(ui.get_selected()).ok();
         if let Some(r) = rows::step(&self.rows, from, steps) {
             ui.set_selected(r as i32);
+            let top = rows::scroll_to(
+                &self.rows,
+                r,
+                ui.get_list_scroll(),
+                ui.get_list_view_height(),
+            );
+            ui.set_list_scroll(top);
+            self.refresh_view(ui);
         }
     }
 
@@ -354,6 +363,15 @@ fn main() -> Result<(), slint::PlatformError> {
         p.show_state(&ui)
     });
     on!(on_activate, |p, ui, row| p.activate(&ui, row));
+
+    // Scrolling and resizing: show the rows now in view. Skipped while the player is busy, as it
+    // refreshes the view itself after anything it scrolls.
+    let (weak, p) = (ui.as_weak(), player.clone());
+    ui.on_list_view_changed(move || {
+        if let (Some(ui), Ok(p)) = (weak.upgrade(), p.try_borrow()) {
+            p.refresh_view(&ui);
+        }
+    });
     on!(on_move_selection, |p, ui, steps| p
         .move_selection(&ui, steps));
 

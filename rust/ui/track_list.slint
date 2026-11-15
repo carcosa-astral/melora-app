@@ -1,11 +1,14 @@
-// The library list: album (or DJ) headings, disc headings and tracks, at fixed heights that the
-// Rust side (rows.rs) also uses to work out where each row sits, so it can scroll to any row.
-import { ListView } from "std-widgets.slint";
+// The library list: album (or DJ) headings, disc headings and tracks. Rust (rows.rs) knows where
+// every row sits and hands over only the rows in view, each with its place, so scrolling to any
+// row is exact however tall the headings are.
+import { ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // kind: 0 album heading, 1 disc heading, 2 track.
 export struct Row {
     kind: int,
+    // Position in the whole list (not just the rows in view).
+    index: int,
     title: string,
     subtitle: string,
     number: string,
@@ -118,26 +121,27 @@ component RowView inherits Rectangle {
 }
 
 // Arrow keys, Page Up/Down and Home/End move the selection (`move-selection` with a step count;
-// the Rust side skips headings); Enter and double-click play.
+// the Rust side skips headings and scrolls); Enter and double-click play.
 export component TrackList inherits FocusScope {
+    // Only the rows in view; `count` and `total-height` describe the whole list.
     in property <[Row]> rows;
+    in property <int> count;
+    in property <length> total-height;
     in-out property <int> selected: -1;
+    // How far down the list is scrolled (0 at the top), read and set by Rust.
+    in-out property <length> scroll-y;
+    out property <length> view-height: sv.visible-height;
     in property <string> label;
-    out property <bool> focused: self.has-focus;
     callback move-selection(int);
     callback activate(int);
+    // The scroll position or the height changed: Rust hands over the rows now in view.
+    callback view-changed();
 
-    // Scroll so the selected row is in view whenever it changes, from the keys or from Rust.
-    changed selected => {
-        if (selected < 0 || selected >= rows.length) { return; }
-        let top = rows[selected].y;
-        let bottom = top + rows[selected].height;
-        if (top < -list.content-y) {
-            list.content-y = -top;
-        } else if (bottom > -list.content-y + list.visible-height) {
-            list.content-y = list.visible-height - bottom;
-        }
-    }
+    // Rust moves scroll-y; the wheel and the scrollbar move the ScrollView. Each follows the other.
+    property <length> content-y: sv.content-y;
+    changed content-y => { scroll-y = -content-y; view-changed(); }
+    changed scroll-y => { sv.content-y = -scroll-y; view-changed(); }
+    changed view-height => { view-changed(); }
 
     key-pressed(e) => {
         if (e.modifiers.control || e.modifiers.alt) { return reject; }
@@ -151,21 +155,27 @@ export component TrackList inherits FocusScope {
         reject
     }
 
-    list := ListView {
+    sv := ScrollView {
+        content-height: root.total-height;
+        content-width: self.visible-width;
+        accessible-role: list;
         accessible-label: root.label;
-        accessible-delegate-focus: root.selected;
-        accessible-item-count: root.rows.length;
-        for row[i] in root.rows: RowView {
+        accessible-item-count: root.count;
+
+        for row in root.rows: RowView {
+            x: 0;
+            y: row.y;
+            width: sv.visible-width;
             item: row;
-            index: i;
-            count: root.rows.length;
-            selected: i == root.selected;
+            index: row.index;
+            count: root.count;
+            selected: row.index == root.selected;
             clicked => {
                 root.focus();
-                if (row.kind == 2) { root.selected = i; }
+                if (row.kind == 2) { root.selected = row.index; }
             }
             double-clicked => {
-                if (row.kind == 2) { root.activate(i); }
+                if (row.kind == 2) { root.activate(row.index); }
             }
         }
     }

@@ -25,7 +25,13 @@ fn main() {
     ] {
         let from = Path::new("../lib/bass").join(dll);
         println!("cargo:rerun-if-changed={}", from.display());
-        if let Err(e) = std::fs::copy(&from, exe_dir.join(dll)) {
+        let to = exe_dir.join(dll);
+        // Already there (and maybe in use by a running Melora): nothing to do.
+        let same = |p: &Path| std::fs::metadata(p).map(|m| m.len()).ok();
+        if same(&from).is_some() && same(&from) == same(&to) {
+            continue;
+        }
+        if let Err(e) = std::fs::copy(&from, &to) {
             println!("cargo:warning=couldn't copy {dll}: {e}");
         }
     }

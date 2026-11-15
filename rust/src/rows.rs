@@ -155,6 +155,34 @@ fn blank() -> ListRow {
     }
 }
 
+/// The rows that show in a view `height` tall scrolled `top` down the list, plus a few either
+/// side so fast scrolling doesn't show gaps.
+pub fn in_view(rows: &[ListRow], top: f32, height: f32) -> std::ops::Range<usize> {
+    const SPARE: usize = 4;
+    let start = rows
+        .partition_point(|r| r.y + r.height <= top)
+        .saturating_sub(SPARE);
+    let end = (rows.partition_point(|r| r.y < top + height) + SPARE).min(rows.len());
+    start..end.max(start)
+}
+
+/// How far to scroll so row `r` is fully in view, moving as little as possible. Scrolling up to
+/// an album's first track brings its headings into view as well.
+pub fn scroll_to(rows: &[ListRow], r: usize, top: f32, height: f32) -> f32 {
+    let Some(row) = rows.get(r) else { return top };
+    if row.y < top {
+        let mut first = r;
+        while first > 0 && rows[first - 1].track.is_none() {
+            first -= 1;
+        }
+        rows[first].y
+    } else if row.y + row.height > top + height {
+        row.y + row.height - height
+    } else {
+        top
+    }
+}
+
 /// The track row `steps` track rows away from `from` (negative: up), stopping at the first and
 /// last tracks. Headings are skipped. None when the list has no tracks.
 pub fn step(rows: &[ListRow], from: Option<usize>, steps: i32) -> Option<usize> {
@@ -244,6 +272,28 @@ mod tests {
         assert_eq!(step(&rows, Some(2), 10), Some(6));
         assert_eq!(step(&rows, Some(5), 1), Some(6)); // from a heading
         assert_eq!(step(&[], None, 1), None);
+    }
+
+    #[test]
+    fn only_rows_in_view_and_a_few_spare() {
+        let mut l = lib();
+        let t = l.tracks[2].clone();
+        l.tracks = vec![t; 100]; // one album heading, then 100 tracks
+        let rows = build(&l);
+        assert_eq!(in_view(&rows, 0.0, 200.0), 0..9); // the heading and 4 tracks start above 200 px, then 4 spare
+        let r = in_view(&rows, 1000.0, 100.0);
+        assert!(rows[r.start + 4].y <= 1000.0 && rows[r.end - 5].y < 1100.0);
+        assert_eq!(in_view(&rows, 99_999.0, 100.0), 97..101);
+        assert_eq!(in_view(&[], 0.0, 100.0), 0..0);
+    }
+
+    #[test]
+    fn scrolling_to_a_row_moves_as_little_as_possible() {
+        let rows = build(&lib()); // Alpha 0-72, Disc 1 72-102, One 102-134, Disc 2, Two 164-196, Beta 196-268, Solo 268-300
+        assert_eq!(scroll_to(&rows, 2, 0.0, 200.0), 0.0); // already in view
+        assert_eq!(scroll_to(&rows, 6, 0.0, 200.0), 100.0); // bottom edge lines up
+        assert_eq!(scroll_to(&rows, 2, 150.0, 200.0), 0.0); // up to an album's first track: its headings too
+        assert_eq!(scroll_to(&rows, 4, 180.0, 200.0), 134.0); // and to a disc's first track: its disc heading
     }
 
     #[test]
