@@ -37,6 +37,14 @@ Phase 3 is done:
 - Station logos from Radio Browser, by the station's address or else its name, cached under 2.x's
   keys (found ones kept, misses tried again after a week). They follow 2.x's "online" setting.
 
+Phase 4, in progress:
+- Done: Melora's icon on the exe (Explorer, a pinned taskbar button), the window and the tray.
+- Done: the tray icon, as in 2.x. Left-click shows or hides Melora; right-click has what's playing,
+  Play/Pause (Stop for radio), Next, Previous, Show Melora and Quit; the tooltip says what's
+  playing. Minimizing hides to the tray (2.x's `minimizeToTray` setting, on unless turned off).
+  Ctrl+Q quits. Not yet: 2.x's one-time "Melora is in the system tray" balloon.
+- Next: media keys and the Windows media overlay, then Settings, scrobbling and Discord.
+
 Covers have 6 px rounded corners and DJ pictures are round, as in 2.x. The rounding is baked into
 the picture when it's shrunk, because Slint's software renderer doesn't round a cropped image.
 
@@ -75,7 +83,8 @@ cargo build --release
 | `src/radio.rs` | Stream titles and headers, pasted addresses, and .m3u station files |
 | `src/logos.rs` | Station logos from Radio Browser |
 | `src/rows.rs` | The list's rows (headings and tracks), their positions, and keyboard steps |
-| `src/backdrop.rs` | Dark title bar on Windows |
+| `src/window.rs` | The dark title bar, and hiding to and coming back from the tray (Windows) |
+| `src/tray.rs` | The tray icon and its menu |
 | `ui/app.slint` | The window |
 | `ui/track_list.slint` | The library list |
 | `ui/dialogs.slint` | The station panel, delete confirmation and menus |
@@ -97,6 +106,8 @@ Approved by Griff on 2026-11-15 for the 3.0 rewrite, when the no-crates rule was
 | `image` (JPEG and PNG only) | Decodes and shrinks covers. Slint already uses the same version. Approved 2026-11-15 for phase 2 |
 | `notify` | Watches library folders for changes. Approved 2026-11-15 for phase 2 |
 | `ureq`, `serde_json` | Asking Radio Browser for station logos, and reading its answers. Approved 2026-11-15 for phase 3 |
+| `tray-icon` | The notification-area icon and its menu. Approved 2026-11-15 for phase 4 |
+| `winresource` (build only) | Puts Melora's icon into the exe. Approved 2026-11-15 for phase 4 |
 | `rusqlite` (bundled SQLite) | The library database, in 2.x's layout. Approved 2026-11-15 for phase 2 |
 | BASS (DLLs, not a crate) | All playback, as in 2.x |
 

@@ -14,6 +14,7 @@ use crate::engine::Engine;
 use crate::library::Library;
 use crate::queue::{Info, Queue, Repeat};
 use crate::rows::{self, ListRow, RowKind};
+use crate::tray::Tray;
 use crate::{AppWindow, Row, covers, logos, radio};
 
 /// The Radio tab's place among the views.
@@ -114,6 +115,8 @@ pub struct Player {
     pub logos_pending: HashSet<String>,
     /// None when looking things up online is turned off.
     pub logo_loader: Option<logos::Loader>,
+    /// The notification-area icon (None if Windows refused it).
+    pub tray: Option<Tray>,
 }
 
 fn take<T>(slot: &Mutex<Option<T>>) -> Option<T> {
@@ -393,13 +396,19 @@ impl Player {
             }
             .into(),
         );
+        if let Some(tray) = &self.tray {
+            tray.set_now_playing(&now);
+        }
         ui.set_now_playing(now.into());
         ui.set_format_text(format.unwrap_or_default().into());
         ui.set_length(self.engine.length() as f32);
         self.show_state(ui);
     }
 
-    pub fn show_state(&self, ui: &AppWindow) {
+    pub fn show_state(&mut self, ui: &AppWindow) {
+        if let Some(tray) = &mut self.tray {
+            tray.set_playing(self.engine.is_playing(), self.engine.is_live());
+        }
         let len = self.engine.length();
         ui.set_loaded(self.engine.is_loaded());
         ui.set_playing(self.engine.is_playing());

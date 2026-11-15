@@ -1,7 +1,6 @@
 // Release builds have no console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod backdrop;
 mod bass;
 mod covers;
 mod db;
@@ -14,7 +13,9 @@ mod player;
 mod queue;
 mod radio;
 mod rows;
+mod tray;
 mod watch;
+mod window;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -124,6 +125,8 @@ fn main() -> Result<(), slint::PlatformError> {
         .and_then(|v| v.parse::<f32>().ok())
         .unwrap_or(1.0)
         .clamp(0.0, 1.0);
+    // Minimizing hides Melora to the tray, as in 2.x (unless that's been turned off there).
+    let to_tray = setting("minimizeToTray").as_deref() != Some("0");
 
     let mut engine = Engine::new();
     engine.set_volume(volume);
@@ -160,6 +163,13 @@ fn main() -> Result<(), slint::PlatformError> {
             logos::Loader::new(db_file.clone(), base.clone(), move || {
                 let _ = weak.upgrade_in_event_loop(|ui| ui.invoke_logos_ready());
             })
+        }),
+        // Tray clicks and menu choices arrive off to the side; hand them to the window's thread.
+        tray: tray::Tray::new({
+            let weak = ui.as_weak();
+            move |action| {
+                let _ = weak.upgrade_in_event_loop(move |ui| ui.invoke_tray_action(action as i32));
+            }
         }),
     }));
 
@@ -235,6 +245,31 @@ fn main() -> Result<(), slint::PlatformError> {
     on!(on_station_connected, |p, ui| p.station_connected(&ui));
     on!(on_probe_done, |p, ui| p.probe_done(&ui));
     on!(on_logos_ready, |p, ui| p.logos_ready(&ui));
+    on!(on_tray_action, |p, ui, code| {
+        use tray::Action;
+        let actions = [
+            Action::Toggle,
+            Action::PlayPause,
+            Action::Next,
+            Action::Previous,
+            Action::Show,
+            Action::Quit,
+        ];
+        match actions.into_iter().find(|a| *a as i32 == code) {
+            Some(Action::Toggle) if window::is_in_front(ui.window()) => window::hide(ui.window()),
+            Some(Action::Toggle | Action::Show) => window::show(ui.window()),
+            Some(Action::PlayPause) => p.toggle_play(&ui),
+            Some(Action::Next) => p.next(&ui),
+            Some(Action::Previous) => p.previous(&ui),
+            Some(Action::Quit) => {
+                let _ = slint::quit_event_loop();
+            }
+            None => {}
+        }
+    });
+    ui.on_quit(|| {
+        let _ = slint::quit_event_loop();
+    });
     on!(on_import_stations, |p, ui| {
         let picked = rfd::FileDialog::new()
             .set_title("Import stations")
@@ -333,6 +368,9 @@ fn main() -> Result<(), slint::PlatformError> {
     ticker.start(TimerMode::Repeated, Duration::from_millis(40), move || {
         if let Some(ui) = weak.upgrade() {
             p.borrow_mut().tick(&ui);
+            if to_tray && p.borrow().tray.is_some() && window::is_minimized(ui.window()) {
+                window::hide(ui.window());
+            }
         }
     });
 
@@ -341,7 +379,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let weak = ui.as_weak();
     Timer::single_shot(Duration::ZERO, move || {
         if let Some(ui) = weak.upgrade() {
-            backdrop::apply(ui.window());
+            window::apply(ui.window());
         }
     });
     let result = slint::run_event_loop();

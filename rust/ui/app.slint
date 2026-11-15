@@ -13,6 +13,7 @@ export { Row }
 
 export component AppWindow inherits Window {
     title: window-title;
+    icon: @image-url("icon-64.png");
     preferred-width: 1000px;
     preferred-height: 720px;
     min-width: 480px;
@@ -99,6 +100,10 @@ export component AppWindow inherits Window {
     callback list-view-changed();
     // Covers have been loaded in the background.
     callback covers-ready();
+    // Ctrl+Q, or Quit in the tray menu.
+    callback quit();
+    // The tray icon was clicked or its menu used (see tray.rs Action).
+    callback tray-action(int);
 
     forward-focus: list;
 
@@ -108,6 +113,8 @@ export component AppWindow inherits Window {
             if (e.text == " ") { toggle-play(); return accept; }
             if (e.modifiers.control && e.text == Key.LeftArrow) { previous(); return accept; }
             if (e.modifiers.control && e.text == Key.RightArrow) { next(); return accept; }
+            // Some keyboards send Ctrl+Q as the control character 0x11 rather than "q".
+            if (e.modifiers.control && (e.text == "q" || e.text == "Q" || e.text == "\u{11}")) { quit(); return accept; }
             reject
         }
 

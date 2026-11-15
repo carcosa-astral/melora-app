@@ -1,4 +1,5 @@
-//! Compiles the UI and puts the BASS DLLs next to the exe, where Melora loads them from.
+//! Compiles the UI, gives the exe Melora's icon, and puts the BASS DLLs next to the exe, where
+//! Melora loads them from.
 
 use std::path::Path;
 
@@ -6,6 +7,16 @@ fn main() {
     let config = slint_build::CompilerConfiguration::new().with_style("fluent-dark".into());
     if let Err(e) = slint_build::compile_with_config("ui/app.slint", config) {
         panic!("UI failed to compile: {e}"); // a build script failing loudly is the right behavior
+    }
+
+    // The icon Explorer and a pinned taskbar button show (the same .ico as 2.x).
+    println!("cargo:rerun-if-changed=melora.ico");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        let mut res = winresource::WindowsResource::new();
+        res.set_icon("melora.ico");
+        if let Err(e) = res.compile() {
+            println!("cargo:warning=the exe gets no icon: {e}");
+        }
     }
 
     // The exe's folder is the one named after the profile, somewhere above OUT_DIR
