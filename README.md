@@ -34,9 +34,9 @@ No playlists, no layout editing, no equalizer. Double-click a track and Melora p
 | Log | `data\melora.log` keeps what went wrong without showing (skipped files, refused scrobbles, dropped stations); "Open log" in Settings opens it |
 | Accessibility | Every control can be reached with Tab and shows an accent ring when it has keyboard focus; buttons, sliders and list rows have names for screen readers |
 | One instance | Launching Melora again brings the running copy back instead of starting a second one |
-| Look | Dark theme, Mica backdrop on Windows 11, IBM Plex Sans and Plex Mono (bundled, so no font install needed). The accent colour fades to a colour from the playing album's art (can be turned off in Settings) |
-| Columns | Drag the dividers in the list headers to resize Artist and Length; Title takes the rest |
-| Remembers | Window size, position and maximized state, column widths, the open tab, volume, shuffle and repeat |
+| Look | Nord, deepened for contrast, in solid colours, with IBM Plex Sans and Plex Mono (bundled, so no font install needed) |
+| Remembers | Window size, position and maximized state, the open tab, volume, shuffle and repeat |
+| Small | About 16 MB on disk and about 30 MB of memory; no runtime to install |
 | Portable | Everything lives next to `Melora.exe`; nothing is written to AppData or the registry |
 
 ### Keyboard
@@ -91,7 +91,7 @@ Melora writes only to a `data` folder beside the exe:
 ```
 Melora\
 ├── Melora.exe
-├── bass.dll, bassflac.dll, bassopus.dll, bass_aac.dll, basshls.dll
+├── bass.dll, bassmix.dll, bassflac.dll, bassopus.dll, bass_aac.dll, basshls.dll
 └── data\
     ├── melora.db      libraries, folders, stations, settings, scrobble and love queues,
     │                  cover addresses and scrobbling keys/tokens (SQLite, plain text,
@@ -105,31 +105,18 @@ Folders on the same drive as Melora are stored as relative paths, so a copy on a
 
 ## Building
 
-Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) on Windows 10 (1809) or later, x64.
+Requires [Rust](https://rustup.rs/) (stable) on Windows 10 (1809) or later, x64. From `rust/`:
 
 ```bash
-dotnet build src/Melora
+cargo build --release
 ```
 
 ```bash
-dotnet run --project src/Melora
+cargo test --release
 ```
 
-```bash
-dotnet test
-```
-
-### Portable build
-
-```bash
-dotnet publish src/Melora -p:PublishProfile=Portable
-```
-
-This produces a self-contained folder in `dist\Melora\` (about 85 MB, with the .NET runtime included and compressed into `Melora.exe`). Copy that folder anywhere; no installer is needed.
-
-To trade disk space for memory and startup time, add `-p:EnableCompressionInSingleFile=false -p:PublishReadyToRun=true`.
-The folder grows to about 250 MB, but Melora uses about 55 MB of memory instead of 140 MB and shows its
-window in about 0.65 s instead of 1 s.
+`rust\target\release\` is then a working Melora folder: `Melora.exe` and the BASS DLLs. Copy those
+anywhere; no installer is needed. More in [rust/README.md](rust/README.md).
 
 ## Releasing
 
@@ -141,31 +128,20 @@ pwsh tools/release.ps1 -DryRun
 pwsh tools/release.ps1
 ```
 
-The script releases the version in `Melora.csproj`, using its `CHANGELOG.md` entry as the notes. It checks
-that everything is committed and pushed and that the version is new, runs the tests, builds the portable
-folder, zips it without any `data` folder, tags the commit and publishes the GitHub release with the zip
-attached. `-DryRun` does everything except tagging and publishing, and shows the notes. It needs the
-[GitHub CLI](https://cli.github.com/), signed in.
+The script releases the version in `rust/Cargo.toml`, using its `CHANGELOG.md` entry as the notes. It
+checks that everything is committed and pushed and that the version is new, runs the tests, builds
+Melora, zips `Melora.exe` and the BASS DLLs (never a `data` folder), tags the commit and publishes the
+GitHub release with the zip attached. `-DryRun` does everything except tagging and publishing, and
+shows the notes. It needs the [GitHub CLI](https://cli.github.com/), signed in.
 
 ## Project layout
 
 ```
-src/Melora/
-├── Audio/        BASS playback wrapper, gapless output
-├── Library/      SQLite database, folder scanning and watching, track and album models
-├── Radio/        Stations, stream checks, ICY / Ogg metadata parsing
-├── Scrobbling/   Last.fm and ListenBrainz clients, scrobble rules, offline queue, loves
-├── Discord/      Discord status over its local pipe, cover lookup for it
-├── Playback/     Play order: in-order, shuffle with artist and album spread, repeat
-├── Interop/      Mica and dark title bar, tray icon, Windows media overlay
-├── Theme/        Accent colour picked from album art
-├── Assets/Fonts/ IBM Plex (SIL Open Font License)
-└── *.xaml        Main window and settings
-tests/Melora.Tests/  Unit tests (xUnit)
-tools/make-icon.ps1  Renders Assets/Melora.ico and tools/Melora-1024.png
+rust/                The app (Rust and Slint); its README lists every file
+lib/bass/            Native BASS libraries (x64)
+tools/make-icon.ps1  Renders rust/melora.ico and tools/Melora-1024.png
 tools/release.ps1    Tests, builds, zips and publishes a GitHub release
 .github/workflows/   Builds and tests every push
-lib/bass/         Native BASS libraries (x64)
 ```
 
 ## Roadmap
@@ -181,13 +157,13 @@ lib/bass/         Native BASS libraries (x64)
    (build and test on GitHub, one-command releases, a "new version" notice in Settings), released together~~
 9. ~~**1.3, pictures and getting around**: missing album covers and DJ pictures found online, jump to now playing, type to jump~~
 10. ~~**2.0**: fades on pause and stop, gapless across sample rates, station logos, backing up stations, DJ heading details, "Open log", a keyboard and screen-reader pass~~
-11. **3.0, Rust**: the same Melora rebuilt in Rust (Slint for the window, BASS still for sound), being built in [`rust/`](rust/README.md) while 2.x keeps shipping from `src/`. Nothing new; the only things dropped are Mica and the cover-tinted accent, for a solid Nord look. Phases, each ending in something that runs:
+11. ~~**3.0, Rust**: the same Melora rebuilt in Rust (Slint for the window, BASS still for sound), in [`rust/`](rust/README.md). Nothing new; the only things dropped are Mica, the cover-tinted accent and resizable columns, for a solid Nord look. Phases, each ending in something that runs:~~
     1. ~~Plays music: window, BASS, a folder with gapless and fades (a first proof plays one file)~~
     2. ~~Library: scanning, tags, albums, DJs, covers, the list screens~~
     3. ~~Radio: stations, logos, live song info, import and export~~
     4. ~~Connected: scrobbling, loves, Discord, tray, media keys and overlay~~
     5. ~~Polish: online covers, type to jump, update check, settings, keyboard and screen readers~~
-    6. Ship 3.0.0: data carried over from 2.x; `src/` and the C# tests are removed
+    6. ~~Ship 3.0.0: data carried over from 2.x; `src/` and the C# tests are removed~~
 
 See [CHANGELOG.md](CHANGELOG.md) for what has shipped.
 

@@ -1,11 +1,11 @@
-# Renders Melora's icon (a dark tile with three accent bars) to src/Melora/Assets/Melora.ico.
+# Renders Melora's icon (a dark tile with three accent bars) to rust/melora.ico.
 # Each size is drawn separately and stored as PNG inside the .ico, so small sizes stay crisp.
 # Also writes a 1024 px PNG, tools/Melora-1024.png, for the app icon in Discord's developer portal.
 #   pwsh tools/make-icon.ps1
 Add-Type -AssemblyName System.Drawing
 
 $sizes = 16, 20, 24, 32, 40, 48, 64, 128, 256
-$out = Join-Path $PSScriptRoot "..\src\Melora\Assets\Melora.ico"
+$out = Join-Path $PSScriptRoot "..\rust\melora.ico"
 $tile = [System.Drawing.Color]::FromArgb(255, 0x1E, 0x1E, 0x26)
 $accent = [System.Drawing.Color]::FromArgb(255, 0x9B, 0xB0, 0xFF)
 

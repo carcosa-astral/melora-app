@@ -5,19 +5,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-### Added
-- Started Melora 3.0, a rebuild in Rust, in the `rust/` folder. A first proof plays one file through
-  BASS with the 150 ms fades, in a Slint window using Melora's colours and font: an 8.9 MB folder
-  (exe and BASS) using about 21 MB of memory. It isn't part of the 2.x download.
-- Melora 3.0, phases 1 to 5 (not released): everything 2.x does, rebuilt in Rust. Gapless
-  playback with the 2.x engine; Music and Mixes (scanning, covers, DJ pictures, shuffle, repeat,
-  volume, folder watching); Radio (stations, live titles, logos, backing up); the tray, media keys
-  and Windows media overlay; Settings; scrobbling and loves; Discord; covers found online; type to
-  jump and jump to now playing; the update check and the log. It uses 2.x's data folder layout.
+## [3.0.0] - 2026-11-15
+
+Melora, rebuilt in Rust. It does everything 2.x does, with a much smaller download and far less memory, and keeps using your 2.x `data` folder as it is.
 
 ### Changed
-- Melora 3.0 gets its own look: Nord, deepened for contrast, in solid colours. It drops 2.x's Mica
-  backdrop and the accent colour taken from album covers, and stays on Slint's software renderer.
+- Rebuilt from C# and WPF in Rust, with Slint for the window and BASS still for sound, and the
+  same gapless engine. The download is about 9 MB instead of 86 MB, a small library takes about
+  30 MB of memory instead of 140 MB, and no runtime needs to be installed.
+- A new look: Nord, deepened for contrast, in solid colours.
+- Your libraries, stations, settings, scrobbling and Discord set-up, covers and log carry over
+  from 2.x unchanged. To update, replace `Melora.exe` and the DLLs and keep `data`; the files
+  2.x needed that 3.0 doesn't (`D3DCompiler_47_cor3.dll`, `PenImc_cor3.dll`,
+  `PresentationNative_cor3.dll`, `vcruntime140_cor3.dll`, `wpfgfx_cor3.dll`, `e_sqlite3.dll`)
+  can be deleted.
+- The window opens at its default size the first time, then remembers its place again.
+
+### Removed
+- The Mica backdrop and the accent colour taken from album covers ("Tint Melora").
+- Resizing the list's columns.
 
 ## [2.0.0] - 2026-11-04
 

@@ -1,10 +1,15 @@
 [package]
 name = "melora"
-version = "3.0.0-alpha.1"
+version = "3.0.0"
 edition = "2024"
-description = "Melora, a portable music player (Rust rewrite, in progress)"
+description = "Melora, a minimal portable music player"
 license = "MIT"
 publish = false
+
+# Melora.exe, as 2.x is called, so updating means replacing the same file.
+[[bin]]
+name = "Melora"
+path = "src/main.rs"
 
 [dependencies]
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }

@@ -10,15 +10,14 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: rust
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-
-      - name: Build
-        run: dotnet build -c Release
-
       - name: Test
-        run: dotnet test -c Release --no-build
+        run: cargo test --release --locked
+
+      - name: Lint
+        run: cargo clippy --release --locked -- -D warnings

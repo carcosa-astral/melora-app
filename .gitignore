@@ -1,9 +1,7 @@
 # Build output
-bin/
-obj/
 dist/
-*.user
-.vs/
+
+# Editors
 .vscode/
 .idea/
 

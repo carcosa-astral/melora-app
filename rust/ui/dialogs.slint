@@ -1,6 +1,6 @@
 // In-window panels: adding or editing a radio station, confirming a delete, and small menus.
 // They cover the window in its own background colour (solid, no see-through scrim).
-import { Button, CheckBox, LineEdit, ScrollView } from "std-widgets.slint";
+import { AboutSlint, Button, CheckBox, LineEdit, ScrollView } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 component Panel inherits Rectangle {
@@ -476,6 +476,11 @@ export component SettingsPanel inherits Rectangle {
                         Rectangle { height: 16px; }
                         Heading { text: "About"; }
                         Hint { text: version; }
+                        // Slint's free licence asks for this credit in the app.
+                        HorizontalLayout {
+                            alignment: start;
+                            AboutSlint { max-width: 220px; }
+                        }
                         CheckBox {
                             text: "Check GitHub for new versions (once a day)";
                             checked <=> update-enabled;

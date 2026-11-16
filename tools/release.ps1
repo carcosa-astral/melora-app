@@ -1,4 +1,4 @@
-# Publishes a Melora release on GitHub, from the version in Melora.csproj and its CHANGELOG.md entry:
+# Publishes a Melora release on GitHub, from the version in rust/Cargo.toml and its CHANGELOG.md entry:
 # checks everything is committed and pushed, runs the tests, builds the portable folder, zips it
 # (without any data folder), tags the commit and creates the release with the zip attached.
 #   pwsh tools/release.ps1            do it
@@ -14,8 +14,8 @@ function Check($ok, $message) { if ($ok) { return }; if ($DryRun) { Write-Host "
 function Run { & $args[0] $args[1..($args.Count - 1)]; if ($LASTEXITCODE -ne 0) { Fail "$($args -join ' ') failed" } }
 
 # ---- What's being released ----
-$version = ([xml](Get-Content src/Melora/Melora.csproj)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
-if ($version -notmatch '^\d+\.\d+\.\d+$') { Fail "couldn't read a version like 1.2.3 from Melora.csproj (got '$version')" }
+$version = [regex]::Match((Get-Content rust/Cargo.toml -Raw), '(?m)^version = "([^"]+)"').Groups[1].Value
+if ($version -notmatch '^\d+\.\d+\.\d+$') { Fail "couldn't read a version like 1.2.3 from rust/Cargo.toml (got '$version')" }
 $tag = "v$version"
 $zip = "dist/Melora-$version-win-x64.zip"
 
@@ -36,17 +36,18 @@ Check (-not (git status --porcelain)) "there are uncommitted changes"
 Check ((git rev-parse --abbrev-ref HEAD) -eq "main") "not on main"
 Run git fetch --quiet --tags origin
 Check ((git rev-parse HEAD) -eq (git rev-parse origin/main)) "main isn't the same as GitHub's; push or pull first"
-Check (-not (git tag --list $tag)) "$tag already exists; bump the version in Melora.csproj"
+Check (-not (git tag --list $tag)) "$tag already exists; bump the version in rust/Cargo.toml"
 
 # ---- Build ----
-Run dotnet test
-Run dotnet publish src/Melora -p:PublishProfile=Portable
+Run cargo test --release --manifest-path rust/Cargo.toml
+Run cargo build --release --manifest-path rust/Cargo.toml
 
 $stage = "dist/stage"
 Remove-Item $stage, $zip -Recurse -Force -ErrorAction SilentlyContinue
-New-Item -ItemType Directory "$stage/Melora" | Out-Null
-# Files only: dist/Melora may hold a data folder from trying the build, which must never ship.
-Get-ChildItem dist/Melora -File | Copy-Item -Destination "$stage/Melora"
+New-Item -ItemType Directory "$stage/Melora" -Force | Out-Null
+# Named files only: rust/target/release also holds the test data folder, which must never ship.
+$files = "Melora.exe", "bass.dll", "bassmix.dll", "bassflac.dll", "bassopus.dll", "bass_aac.dll", "basshls.dll"
+foreach ($f in $files) { Copy-Item "rust/target/release/$f" "$stage/Melora" }
 Compress-Archive -Path "$stage/Melora" -DestinationPath $zip -CompressionLevel Optimal
 Remove-Item $stage -Recurse -Force
 
@@ -57,7 +58,7 @@ $changes = $section.Groups[1].Value.Trim() -replace '\r?\n {2,}(?=\S)', ' '
 $notes = @"
 $changes
 
-**Install**: download ``Melora-$version-win-x64.zip``, unzip it anywhere and run ``Melora.exe``. To update, replace ``Melora.exe`` (and the DLLs next to it) and keep your ``data`` folder. Windows 10 (1809) or later, 64-bit.
+**Install**: download ``Melora-$version-win-x64.zip``, unzip it anywhere and run ``Melora.exe``. To update, replace ``Melora.exe`` and the DLLs next to it, and keep your ``data`` folder. Windows 10 (1809) or later, 64-bit.
 
 Full history: [CHANGELOG.md](https://github.com/carcosa-astral/melora-app/blob/main/CHANGELOG.md)
 "@
@@ -73,7 +74,7 @@ if ($DryRun) {
 }
 
 # ---- Publish ----
-Run git tag $tag
+Run git tag -a $tag -m "Melora $tag"
 Run git push --quiet origin $tag
 Run gh release create $tag $zip --title "Melora $tag" --notes-file $notesFile --verify-tag
 Remove-Item $notesFile
