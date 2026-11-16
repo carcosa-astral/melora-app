@@ -249,6 +249,7 @@ impl Player {
         }
         self.save_place(ui);
         self.tab = tab;
+        self.save("tab", ["Music", "Mixes", "Radio"][tab]);
         self.show_view(ui);
     }
 

@@ -141,6 +141,14 @@ fn show_folders(ui: &AppWindow, db: &Db) {
     }
 }
 
+/// Saves where the window is, for next time (2.x's "view.window" is in other units, so 3.0 has
+/// its own key).
+fn save_window(ui: &AppWindow, p: &Player) {
+    if let (Some(db), Some(at)) = (&p.db, window::placement(ui.window())) {
+        let _ = db.set_setting("window.placement", &at);
+    }
+}
+
 fn main() -> Result<(), slint::PlatformError> {
     // Anything unexpected goes in the log before Melora closes, as 2.x does.
     let default_hook = std::panic::take_hook();
@@ -148,6 +156,15 @@ fn main() -> Result<(), slint::PlatformError> {
         log::write(&format!("Unexpected error: {info}"));
         default_hook(info);
     }));
+
+    // One Melora per folder: launching it again brings the running one to the front.
+    let folder = paths::base_dir().to_string_lossy().to_lowercase();
+    if !window::first_instance(&format!(
+        "Melora3-{}",
+        &online::sha1_hex(folder.as_bytes())[..16]
+    )) {
+        return Ok(());
+    }
 
     let base = paths::base_dir().to_string_lossy().into_owned();
     let db_file = paths::data_dir().join("melora.db");
@@ -176,7 +193,12 @@ fn main() -> Result<(), slint::PlatformError> {
     let player = Rc::new(RefCell::new(Player {
         engine,
         views: [Kind::Music, Kind::Mixes, Kind::Radio].map(View::new),
-        tab: 0,
+        // The tab open last time, saved as 2.x saves it.
+        tab: match setting("tab").as_deref() {
+            Some("Mixes") => 1,
+            Some("Radio") => 2,
+            _ => 0,
+        },
         playing: None,
         queue: Queue::new(shuffle, repeat),
         db: None,
@@ -321,6 +343,7 @@ fn main() -> Result<(), slint::PlatformError> {
             Some(Action::Next) => p.next(&ui),
             Some(Action::Previous) => p.previous(&ui),
             Some(Action::Quit) => {
+                save_window(&ui, p);
                 let _ = slint::quit_event_loop();
             }
             None => {}
@@ -496,8 +519,19 @@ fn main() -> Result<(), slint::PlatformError> {
 
     ui.on_open_log(|| window::open_url(&log::ensure().to_string_lossy()));
 
-    ui.on_quit(|| {
+    let (weak, p) = (ui.as_weak(), player.clone());
+    ui.on_quit(move || {
+        if let (Some(ui), Ok(p)) = (weak.upgrade(), p.try_borrow()) {
+            save_window(&ui, &p);
+        }
         let _ = slint::quit_event_loop();
+    });
+    let (weak, p) = (ui.as_weak(), player.clone());
+    ui.window().on_close_requested(move || {
+        if let (Some(ui), Ok(p)) = (weak.upgrade(), p.try_borrow()) {
+            save_window(&ui, &p);
+        }
+        slint::CloseRequestResponse::HideWindow
     });
     on!(on_import_stations, |p, ui| {
         let picked = rfd::FileDialog::new()
@@ -629,6 +663,9 @@ fn main() -> Result<(), slint::PlatformError> {
     let (weak, p) = (ui.as_weak(), player.clone());
     ticker.start(TimerMode::Repeated, Duration::from_millis(40), move || {
         if let Some(ui) = weak.upgrade() {
+            if window::show_requested() {
+                window::show(ui.window());
+            }
             p.borrow_mut().tick(&ui);
             if p.borrow().minimize_to_tray
                 && p.borrow().tray.is_some()
@@ -647,6 +684,14 @@ fn main() -> Result<(), slint::PlatformError> {
     Timer::single_shot(Duration::ZERO, move || {
         if let Some(ui) = weak.upgrade() {
             window::apply(ui.window());
+            let saved = player_for_media
+                .borrow()
+                .db
+                .as_ref()
+                .and_then(|db| db.setting("window.placement"));
+            if let Some(saved) = saved {
+                window::set_placement(ui.window(), &saved);
+            }
             // The overlay needs the native window, which exists now.
             let media = {
                 let weak = ui.as_weak();

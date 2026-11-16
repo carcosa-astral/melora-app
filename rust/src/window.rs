@@ -54,6 +54,38 @@ pub fn open_url(url: &str) {
     let _ = std::process::Command::new("explorer").arg(url).spawn();
 }
 
+/// Where the window is and whether it's maximized, as "left,top,right,bottom,maximized"
+/// (screen pixels; the size it has when not maximized), to save between runs.
+pub fn placement(window: &slint::Window) -> Option<String> {
+    hwnd(window).and_then(win::placement)
+}
+
+/// Puts the window back where `placement` found it. Windows moves it onto a screen if that one
+/// is gone.
+pub fn set_placement(window: &slint::Window, saved: &str) {
+    let n: Vec<i32> = saved
+        .split(',')
+        .filter_map(|s| s.trim().parse().ok())
+        .collect();
+    if let (Some(h), &[l, t, r, b, max]) = (hwnd(window), &n[..])
+        && r - l >= 200
+        && b - t >= 150
+    {
+        win::set_placement(h, [l, t, r, b], max != 0);
+    }
+}
+
+/// One Melora per folder, as 2.x: true for the first. A second one asks the first to come to
+/// the front (it notices in `show_requested`) and should then quit.
+pub fn first_instance(id: &str) -> bool {
+    win::first_instance(id)
+}
+
+/// Whether another launch asked this Melora to come to the front since the last call.
+pub fn show_requested() -> bool {
+    win::show_requested()
+}
+
 /// Brings the window back from the tray (or the taskbar) and to the front.
 pub fn show(window: &slint::Window) {
     if let Some(h) = hwnd(window) {
@@ -94,6 +126,100 @@ mod win {
             title: *const u16,
         ) -> isize;
         fn GetWindowThreadProcessId(hwnd: isize, pid: *mut u32) -> u32;
+        fn GetWindowPlacement(hwnd: isize, wp: *mut WindowPlacement) -> i32;
+        fn SetWindowPlacement(hwnd: isize, wp: *const WindowPlacement) -> i32;
+        fn AllowSetForegroundWindow(pid: u32) -> i32;
+    }
+
+    #[link(name = "kernel32", kind = "raw-dylib")]
+    unsafe extern "system" {
+        fn CreateMutexW(attributes: *const c_void, owned: i32, name: *const u16) -> isize;
+        fn CreateEventW(
+            attributes: *const c_void,
+            manual: i32,
+            initial: i32,
+            name: *const u16,
+        ) -> isize;
+        fn SetEvent(event: isize) -> i32;
+        fn WaitForSingleObject(handle: isize, ms: u32) -> u32;
+        fn GetLastError() -> u32;
+    }
+
+    /// Windows' WINDOWPLACEMENT.
+    #[repr(C)]
+    #[derive(Default)]
+    struct WindowPlacement {
+        length: u32,
+        flags: u32,
+        show_cmd: u32,
+        min_position: [i32; 2],
+        max_position: [i32; 2],
+        normal: [i32; 4],
+    }
+
+    const SW_SHOWNORMAL: u32 = 1;
+    const SW_SHOWMAXIMIZED: u32 = 3;
+    const WPF_RESTORETOMAXIMIZED: u32 = 2;
+    const ERROR_ALREADY_EXISTS: u32 = 183;
+    const ASFW_ANY: u32 = u32::MAX;
+
+    pub fn placement(hwnd: isize) -> Option<String> {
+        let mut wp = WindowPlacement {
+            length: size_of::<WindowPlacement>() as u32,
+            ..Default::default()
+        };
+        if unsafe { GetWindowPlacement(hwnd, &mut wp) } == 0 {
+            return None;
+        }
+        // Minimized (or in the tray) from maximized still counts as maximized.
+        let max = wp.show_cmd == SW_SHOWMAXIMIZED || wp.flags & WPF_RESTORETOMAXIMIZED != 0;
+        let [l, t, r, b] = wp.normal;
+        Some(format!("{l},{t},{r},{b},{}", u8::from(max)))
+    }
+
+    pub fn set_placement(hwnd: isize, normal: [i32; 4], max: bool) {
+        let wp = WindowPlacement {
+            length: size_of::<WindowPlacement>() as u32,
+            show_cmd: if max { SW_SHOWMAXIMIZED } else { SW_SHOWNORMAL },
+            normal,
+            ..Default::default()
+        };
+        unsafe { SetWindowPlacement(hwnd, &wp) };
+    }
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain([0]).collect()
+    }
+
+    // The "come to the front" signal, made by the first Melora (0 in any other).
+    static SHOW: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+    pub fn first_instance(id: &str) -> bool {
+        // The mutex is never closed: Windows lets go of it when Melora exits.
+        let mutex = unsafe { CreateMutexW(std::ptr::null(), 0, wide(id).as_ptr()) };
+        let first = mutex == 0 || unsafe { GetLastError() } != ERROR_ALREADY_EXISTS;
+        let event =
+            unsafe { CreateEventW(std::ptr::null(), 0, 0, wide(&format!("{id}-show")).as_ptr()) };
+        if first {
+            SHOW.store(event, std::sync::atomic::Ordering::Relaxed);
+        } else if event != 0 {
+            unsafe {
+                AllowSetForegroundWindow(ASFW_ANY); // let the running copy come to the front
+                SetEvent(event);
+            }
+        }
+        first
+    }
+
+    pub fn show_requested() -> bool {
+        let event = SHOW.load(std::sync::atomic::Ordering::Relaxed);
+        event != 0 && unsafe { WaitForSingleObject(event, 0) } == 0
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn window_placement_has_windows_layout() {
+        assert_eq!(size_of::<WindowPlacement>(), 44);
     }
 
     #[link(name = "shell32", kind = "raw-dylib")]
@@ -236,6 +362,16 @@ mod win {
     }
     pub fn hide(_: isize) {}
     pub fn show(_: isize) {}
+    pub fn placement(_: isize) -> Option<String> {
+        None
+    }
+    pub fn set_placement(_: isize, _: [i32; 4], _: bool) {}
+    pub fn first_instance(_: &str) -> bool {
+        true
+    }
+    pub fn show_requested() -> bool {
+        false
+    }
     pub fn tray_balloon(_: &str, _: u32, _: &str, _: &str) -> bool {
         false
     }
