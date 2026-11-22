@@ -182,7 +182,7 @@ export component AppWindow inherits Window {
             // Ctrl+L loves, as in 2.x (0x0C is how some keyboards send it).
             if (e.modifiers.control && (e.text == "l" || e.text == "L" || e.text == "\u{0C}")) { toggle-love(); return accept; }
             // Some keyboards send Ctrl+Q as the control character 0x11 rather than "q".
-            if (e.modifiers.control && (e.text == "q" || e.text == "Q" || e.text == "\u{11}")) { quit(); return accept; }
+            if (e.modifiers.control && (e.text == "q" || e.text == "Q")) { quit(); return accept; }
             reject
         }
 

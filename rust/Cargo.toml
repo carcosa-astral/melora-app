@@ -1,6 +1,6 @@
 [package]
 name = "melora"
-version = "3.0.0"
+version = "3.0.1"
 edition = "2024"
 description = "Melora, a minimal portable music player"
 license = "MIT"

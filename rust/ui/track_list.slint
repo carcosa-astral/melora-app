@@ -231,7 +231,9 @@ component RowView inherits Rectangle {
             color: Theme.dim;
             vertical-alignment: center;
             overflow: elide;
-            horizontal-stretch: 0.4;
+            // Fixed share of the row, so every artist starts at the same x.
+            min-width: parent.width * 0.25;
+            max-width: parent.width * 0.25;
         }
         Text {
             text: item.length;
@@ -265,7 +267,9 @@ component RowView inherits Rectangle {
             color: Theme.dim;
             vertical-alignment: center;
             overflow: elide;
-            horizontal-stretch: 0.6;
+            // Fixed share of the row, so every artist starts at the same x.
+            min-width: parent.width * 0.25;
+            max-width: parent.width * 0.25;
         }
         Text {
             text: item.length;

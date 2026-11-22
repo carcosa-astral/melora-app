@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-11-22
+
+### Fixed
+- Pressing any Ctrl shortcut Melora doesn't use (Ctrl+K, say) closed it without a word. Only Ctrl+Q quits now.
+- In Mixes and Music, the artist column lines up instead of drifting with the length of each title.
+
+
 ## [3.0.0] - 2026-11-15
 
 Melora, rebuilt in Rust. It does everything 2.x does, with a much smaller download and far less memory, and keeps using your 2.x `data` folder as it is.

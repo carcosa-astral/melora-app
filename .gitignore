@@ -17,3 +17,4 @@ Desktop.ini
 
 # Rust build output
 target/
+*.mp3
