@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-11-22
+
+### Fixed
+- Media keys and the Windows media overlay did nothing: Melora asked for its window before it existed and quietly gave up. The dark title bar and the remembered window position had the same problem.
+- A media-key set-up problem is now written to the log.
+
+
 ## [3.0.1] - 2026-11-22
 
 ### Fixed

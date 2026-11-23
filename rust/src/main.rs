@@ -679,43 +679,54 @@ fn main() -> Result<(), slint::PlatformError> {
     });
 
     ui.show()?;
-    // The native window exists once the event loop has started.
+    // The native window only exists some moments after the event loop starts, so wait for it.
     let (weak, player_for_media) = (ui.as_weak(), player.clone());
-    Timer::single_shot(Duration::ZERO, move || {
-        if let Some(ui) = weak.upgrade() {
-            window::apply(ui.window());
-            let saved = player_for_media
-                .borrow()
-                .db
-                .as_ref()
-                .and_then(|db| db.setting("window.placement"));
-            if let Some(saved) = saved {
-                window::set_placement(ui.window(), &saved);
+    let window_timer = Rc::new(Timer::default());
+    let stop = window_timer.clone();
+    window_timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(50),
+        move || {
+            if let Some(ui) = weak.upgrade() {
+                if window::hwnd(ui.window()).is_none() {
+                    return;
+                }
+                stop.stop();
+                window::apply(ui.window());
+                let saved = player_for_media
+                    .borrow()
+                    .db
+                    .as_ref()
+                    .and_then(|db| db.setting("window.placement"));
+                if let Some(saved) = saved {
+                    window::set_placement(ui.window(), &saved);
+                }
+                // The overlay needs the native window, which exists now.
+                let media = {
+                    let weak = ui.as_weak();
+                    media::Media::new(ui.window(), paths::data_dir(), move |c| {
+                        use media::Command;
+                        let (code, seconds) = match c {
+                            Command::Play => (0, 0.0),
+                            Command::Pause => (1, 0.0),
+                            Command::Toggle => (2, 0.0),
+                            Command::Next => (3, 0.0),
+                            Command::Previous => (4, 0.0),
+                            Command::Stop => (5, 0.0),
+                            Command::SeekTo(s) => (6, s as f32),
+                        };
+                        let _ = weak.upgrade_in_event_loop(move |ui| {
+                            ui.invoke_media_command(code, seconds)
+                        });
+                    })
+                };
+                if let Ok(mut p) = player_for_media.try_borrow_mut() {
+                    p.media = media;
+                    p.update_media();
+                }
             }
-            // The overlay needs the native window, which exists now.
-            let media = {
-                let weak = ui.as_weak();
-                media::Media::new(ui.window(), paths::data_dir(), move |c| {
-                    use media::Command;
-                    let (code, seconds) = match c {
-                        Command::Play => (0, 0.0),
-                        Command::Pause => (1, 0.0),
-                        Command::Toggle => (2, 0.0),
-                        Command::Next => (3, 0.0),
-                        Command::Previous => (4, 0.0),
-                        Command::Stop => (5, 0.0),
-                        Command::SeekTo(s) => (6, s as f32),
-                    };
-                    let _ = weak
-                        .upgrade_in_event_loop(move |ui| ui.invoke_media_command(code, seconds));
-                })
-            };
-            if let Ok(mut p) = player_for_media.try_borrow_mut() {
-                p.media = media;
-                p.update_media();
-            }
-        }
-    });
+        },
+    );
     let result = slint::run_event_loop();
     player.borrow().save_volume(&ui);
     result

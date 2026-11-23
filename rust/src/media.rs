@@ -48,13 +48,18 @@ impl Media {
         data: PathBuf,
         on: impl Fn(Command) + Send + 'static,
     ) -> Option<Media> {
-        let hwnd = crate::window::hwnd(window)?;
+        let Some(hwnd) = crate::window::hwnd(window) else {
+            crate::log::write("Media keys: no window handle");
+            return None;
+        };
         let config = PlatformConfig {
             display_name: "Melora",
             dbus_name: "melora",
             hwnd: Some(hwnd as *mut _),
         };
-        let mut controls = MediaControls::new(config).ok()?;
+        let mut controls = MediaControls::new(config)
+            .inspect_err(|e| crate::log::write(&format!("Media keys: {e:?}")))
+            .ok()?;
         controls
             .attach(move |e: MediaControlEvent| {
                 let command = match e {
@@ -71,6 +76,7 @@ impl Media {
                 };
                 on(command);
             })
+            .inspect_err(|e| crate::log::write(&format!("Media keys: {e:?}")))
             .ok()?;
         let _ = controls.set_playback(MediaPlayback::Stopped);
         Some(Media {
